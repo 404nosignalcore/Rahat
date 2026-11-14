@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   contentCard: {
     backgroundColor: Colors.card,

@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   gridOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#EDF2F7',
   },
   gridLineH1: {
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
   },
   zonesLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   zoneRing: {
     position: 'absolute',
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   routeTrackContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
   },

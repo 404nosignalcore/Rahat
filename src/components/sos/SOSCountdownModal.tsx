@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   contentCard: {
     width: '100%',
