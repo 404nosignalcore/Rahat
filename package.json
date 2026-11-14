@@ -4,8 +4,8 @@
   "description": "SafeWalk - AI-Powered Women's Personal Safety & Community Mobile Application",
   "main": "index.js",
   "scripts": {
-    "start": "expo start",
     "dev": "expo start",
+    "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
