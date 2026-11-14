@@ -4,9 +4,10 @@
   "description": "SafeWalk - AI-Powered Women's Personal Safety & Community Mobile Application",
   "main": "index.js",
   "scripts": {
-    "dev": "expo start",
-    "serve": "node server.js",
-    "start": "expo start",
+    "predev": "node scripts/free-port.js",
+    "dev": "expo start --port 8081 --lan",
+    "prestart": "node scripts/free-port.js",
+    "start": "expo start --port 8081 --lan",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",

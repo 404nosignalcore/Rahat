@@ -1,3 +1,4 @@
 @echo off
 set EXPO_NO_TELEMETRY=1
-npx.cmd expo start --lan
+node scripts/free-port.js
+npx.cmd expo start --port 8081 --lan
