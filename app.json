@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "SafeWalk",
+    "slug": "safewalk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B132B"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.safewalk.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SafeWalk uses your location to show nearby safety zones, navigate safe routes, and detect route deviations.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SafeWalk requires background location access to monitor your active journey and detect unexpected deviations when your screen is locked.",
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B132B"
+      },
+      "package": "com.safewalk.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow SafeWalk to use your location for route safety monitoring.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ]
+  }
+}
+
