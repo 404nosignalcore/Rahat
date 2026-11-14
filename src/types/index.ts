@@ -1,6 +1,8 @@
 /**
- * SafeWalk Core Domain Types
+ * Rahat Core Domain Types
  */
+
+export * from './safety';
 
 export type ZoneSafetyLevel = 'green' | 'yellow' | 'red';
 

@@ -1,7 +1,7 @@
 {
-  "name": "safewalk",
+  "name": "rahat",
   "version": "1.0.0",
-  "description": "SafeWalk - AI-Powered Women's Personal Safety & Community Mobile Application",
+  "description": "Rahat - AI-Powered Women's Personal Safety & Community Mobile Application",
   "main": "index.js",
   "scripts": {
     "predev": "node scripts/free-port.js",

@@ -1,22 +1,23 @@
 {
   "expo": {
-    "name": "SafeWalk",
-    "slug": "safewalk",
+    "name": "Rahat",
+    "slug": "rahat",
+    "scheme": "rahat",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B132B"
+      "backgroundColor": "#0F172A"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.safewalk.app",
+      "bundleIdentifier": "com.rahat.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "SafeWalk uses your location to show nearby safety zones, navigate safe routes, and detect route deviations.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "SafeWalk requires background location access to monitor your active journey and detect unexpected deviations when your screen is locked.",
+        "NSLocationWhenInUseUsageDescription": "Rahat uses your location to show nearby safety zones, navigate safe routes, and detect route deviations.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Rahat requires background location access to monitor your active journey and detect unexpected deviations when your screen is locked.",
         "UIBackgroundModes": [
           "location",
           "fetch"
@@ -26,9 +27,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0B132B"
+        "backgroundColor": "#0F172A"
       },
-      "package": "com.safewalk.app",
+      "package": "com.rahat.app",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -43,7 +44,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow SafeWalk to use your location for route safety monitoring.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Rahat to use your location for route safety monitoring.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }

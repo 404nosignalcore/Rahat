@@ -23,7 +23,7 @@ function freePort() {
 
       for (const pid of pids) {
         try {
-          console.log(`[SafeWalk] Killing process ${pid} using port ${PORT}...`);
+          console.log(`[Rahat] Killing process ${pid} using port ${PORT}...`);
           execSync(`taskkill /F /PID ${pid} /T`, { stdio: 'ignore' });
         } catch {}
       }
@@ -36,4 +36,4 @@ function freePort() {
 }
 
 freePort();
-console.log(`[SafeWalk] Port ${PORT} is confirmed free and dedicated to SafeWalk.`);
+console.log(`[Rahat] Port ${PORT} is confirmed free and dedicated to Rahat.`);

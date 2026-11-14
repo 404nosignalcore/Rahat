@@ -52,14 +52,14 @@ export const SafeMapView: React.FC<SafeMapViewProps> = ({
             zone.level === 'green'
               ? 'rgba(42, 157, 143, 0.16)'
               : zone.level === 'yellow'
-              ? 'rgba(231, 111, 81, 0.16)'
-              : 'rgba(230, 57, 70, 0.18)';
+                ? 'rgba(231, 111, 81, 0.16)'
+                : 'rgba(230, 57, 70, 0.18)';
           const borderColor =
             zone.level === 'green'
               ? Colors.green
               : zone.level === 'yellow'
-              ? Colors.yellow
-              : Colors.red;
+                ? Colors.yellow
+                : Colors.red;
 
           // Spatial positioning on canvas relative to center
           const topPercent = 20 + (idx * 24) % 60;

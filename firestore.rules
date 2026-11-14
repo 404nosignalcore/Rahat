@@ -1,86 +1,455 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
-    // Helper functions
-    function isAuthenticated() {
+    // --- Reusable Hardened Primitives ---
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
     }
 
-    // User profiles & private settings
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'nullpointbuilds007@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUserPublicProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'preferredLanguage', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'photoUrl', 'preferredLanguage', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 512))
+        && data.preferredLanguage in ['en', 'hi']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'locationConsent', 'backgroundTrackingConsent', 'notificationConsent', 'sosCountdownSeconds', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'phone', 'locationConsent', 'backgroundTrackingConsent', 'notificationConsent', 'sosCountdownSeconds', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 32))
+        && data.locationConsent is bool
+        && data.backgroundTrackingConsent is bool
+        && data.notificationConsent is bool
+        && data.sosCountdownSeconds is int && data.sosCountdownSeconds >= 3 && data.sosCountdownSeconds <= 30
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEmergencyContact(data) {
+      return data.keys().hasAll(['id', 'ownerUid', 'name', 'relationship', 'phone', 'verificationStatus', 'notifyOnSOS', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'ownerUid', 'name', 'relationship', 'phone', 'verificationStatus', 'notifyOnSOS', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.ownerUid)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && data.relationship is string && data.relationship.size() >= 1 && data.relationship.size() <= 40
+        && data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 24
+        && data.verificationStatus in ['unverified', 'pending', 'verified']
+        && data.notifyOnSOS is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSafetyReport(data) {
+      return data.keys().hasAll(['id', 'authorUid', 'category', 'title', 'description', 'areaLabel', 'latitude', 'longitude', 'severity', 'verificationStatus', 'corroborationCount', 'outdatedFlags', 'abuseFlags', 'isSynthetic', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'authorUid', 'category', 'title', 'description', 'areaLabel', 'latitude', 'longitude', 'severity', 'verificationStatus', 'corroborationCount', 'outdatedFlags', 'abuseFlags', 'isSynthetic', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.authorUid)
+        && data.category in ['harassment', 'stalking', 'verbal_abuse', 'physical_assault', 'poor_lighting', 'secluded_area', 'unsafe_transport', 'suspicious_activity']
+        && data.title is string && data.title.size() >= 5 && data.title.size() <= 140
+        && data.description is string && data.description.size() >= 10 && data.description.size() <= 1000
+        && data.areaLabel is string && data.areaLabel.size() >= 2 && data.areaLabel.size() <= 120
+        && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+        && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+        && data.severity is int && data.severity >= 1 && data.severity <= 5
+        && data.verificationStatus in ['unverified', 'under_review', 'community_corroborated', 'authorized_verified']
+        && data.corroborationCount is int && data.corroborationCount >= 0 && data.corroborationCount <= 100000
+        && data.outdatedFlags is int && data.outdatedFlags >= 0 && data.outdatedFlags <= 100000
+        && data.abuseFlags is int && data.abuseFlags >= 0 && data.abuseFlags <= 100000
+        && data.isSynthetic is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCommunityComment(data) {
+      return data.keys().hasAll(['id', 'reportId', 'authorUid', 'authorDisplay', 'body', 'flaggedAbuse', 'createdAt'])
+        && data.keys().hasOnly(['id', 'reportId', 'authorUid', 'authorDisplay', 'body', 'flaggedAbuse', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.reportId)
+        && isValidId(data.authorUid)
+        && data.authorDisplay is string && data.authorDisplay.size() >= 1 && data.authorDisplay.size() <= 60
+        && data.body is string && data.body.size() >= 2 && data.body.size() <= 500
+        && data.flaggedAbuse is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidJourney(data) {
+      return data.keys().hasAll(['id', 'ownerUid', 'originLabel', 'destinationLabel', 'routeName', 'status', 'lastLatitude', 'lastLongitude', 'deviationDetected', 'startedAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'ownerUid', 'originLabel', 'destinationLabel', 'routeName', 'status', 'sharedWithCircleId', 'lastLatitude', 'lastLongitude', 'deviationDetected', 'startedAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.ownerUid)
+        && data.originLabel is string && data.originLabel.size() >= 1 && data.originLabel.size() <= 120
+        && data.destinationLabel is string && data.destinationLabel.size() >= 1 && data.destinationLabel.size() <= 120
+        && data.routeName is string && data.routeName.size() >= 1 && data.routeName.size() <= 120
+        && data.status in ['active', 'paused', 'completed', 'sos_escalated']
+        && (!('sharedWithCircleId' in data) || (data.sharedWithCircleId is string && data.sharedWithCircleId.size() <= 128))
+        && data.lastLatitude is number && data.lastLatitude >= -90 && data.lastLatitude <= 90
+        && data.lastLongitude is number && data.lastLongitude >= -180 && data.lastLongitude <= 180
+        && data.deviationDetected is bool
+        && data.startedAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSafeCircle(data) {
+      return data.keys().hasAll(['id', 'ownerUid', 'name', 'sharingEnabled', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'ownerUid', 'name', 'sharingEnabled', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.ownerUid)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 80
+        && data.sharingEnabled is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSafeCircleMember(data) {
+      return data.keys().hasAll(['id', 'circleId', 'circleOwnerUid', 'displayName', 'role', 'consentToShareLocation', 'inviteStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'circleId', 'circleOwnerUid', 'memberUid', 'displayName', 'role', 'consentToShareLocation', 'inviteStatus', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.circleId)
+        && isValidId(data.circleOwnerUid)
+        && (!('memberUid' in data) || (data.memberUid is string && data.memberUid.size() <= 128))
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.role in ['owner', 'trusted_member', 'invited']
+        && data.consentToShareLocation is bool
+        && data.inviteStatus in ['accepted', 'pending', 'revoked']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEmergencyAlert(data) {
+      return data.keys().hasAll(['id', 'ownerUid', 'status', 'deliveryChannelStatus', 'latitude', 'longitude', 'mapShareUrl', 'triggeredAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'ownerUid', 'status', 'deliveryChannelStatus', 'latitude', 'longitude', 'mapShareUrl', 'triggeredAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.ownerUid)
+        && data.status in ['countdown', 'active', 'cancelled', 'resolved']
+        && data.deliveryChannelStatus in ['pending', 'sent', 'partial_failure', 'failed', 'offline_fallback']
+        && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+        && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+        && data.mapShareUrl is string && data.mapShareUrl.size() <= 300
+        && data.triggeredAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCommunityPost(data) {
+      return data.keys().hasAll(['id', 'authorUid', 'authorDisplay', 'coarseArea', 'topic', 'body', 'helpfulCount', 'abuseFlags', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'authorUid', 'authorDisplay', 'coarseArea', 'topic', 'body', 'helpfulCount', 'abuseFlags', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.authorUid)
+        && data.authorDisplay is string && data.authorDisplay.size() >= 1 && data.authorDisplay.size() <= 60
+        && data.coarseArea is string && data.coarseArea.size() >= 2 && data.coarseArea.size() <= 100
+        && data.topic in ['area_update', 'suspicious_activity', 'safe_tip', 'lighting_alert']
+        && data.body is string && data.body.size() >= 5 && data.body.size() <= 800
+        && data.helpfulCount is int && data.helpfulCount >= 0 && data.helpfulCount <= 100000
+        && data.abuseFlags is int && data.abuseFlags >= 0 && data.abuseFlags <= 100000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /admins/{adminUid} {
+      allow get: if isValidId(adminUid) && isSignedIn() && request.auth.uid == adminUid;
+      allow list, write: if false;
+    }
+
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow get: if isValidId(userId) && isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isVerifiedUser()
+        && request.auth.uid == userId
+        && isValidUserPublicProfile(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isVerifiedUser()
+        && isValidUserPublicProfile(incoming())
+        && (isAdmin() || (
+          request.auth.uid == userId
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoUrl', 'preferredLanguage', 'updatedAt'])
+        ));
+      allow delete: if isValidId(userId) && isVerifiedUser() && (request.auth.uid == userId || isAdmin());
 
-      // Emergency contacts subcollection
+      match /private/info {
+        allow get: if isValidId(userId) && isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow create: if isValidId(userId)
+          && isVerifiedUser()
+          && request.auth.uid == userId
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == request.auth.uid
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId)
+          && isVerifiedUser()
+          && isValidUserPrivateInfo(incoming())
+          && (isAdmin() || (
+            request.auth.uid == userId
+            && incoming().uid == existing().uid
+            && incoming().updatedAt == request.time
+            && incoming().diff(existing()).affectedKeys().hasOnly(['phone', 'locationConsent', 'backgroundTrackingConsent', 'notificationConsent', 'sosCountdownSeconds', 'updatedAt'])
+          ));
+        allow delete: if isValidId(userId) && isVerifiedUser() && (request.auth.uid == userId || isAdmin());
+      }
+
       match /emergency_contacts/{contactId} {
-        allow read, write: if isOwner(userId);
+        allow get: if isValidId(userId) && isValidId(contactId) && isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow list: if isValidId(userId) && isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+        allow create: if isValidId(userId) && isValidId(contactId)
+          && isVerifiedUser()
+          && request.auth.uid == userId
+          && isValidEmergencyContact(incoming())
+          && incoming().id == contactId
+          && incoming().ownerUid == request.auth.uid
+          && incoming().verificationStatus == 'unverified'
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && isValidId(contactId)
+          && isVerifiedUser()
+          && isValidEmergencyContact(incoming())
+          && (isAdmin() || (
+            request.auth.uid == userId
+            && incoming().id == existing().id
+            && incoming().ownerUid == existing().ownerUid
+            && incoming().createdAt == existing().createdAt
+            && incoming().updatedAt == request.time
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'relationship', 'phone', 'notifyOnSOS', 'verificationStatus', 'updatedAt'])
+          ));
+        allow delete: if isValidId(userId) && isValidId(contactId) && isVerifiedUser() && (request.auth.uid == userId || isAdmin());
       }
     }
 
-    // Safety zones (Public read, admin write)
-    match /safety_zones/{zoneId} {
-      allow read: if true;
-      allow write: if false; // Managed via server-side admin SDK
-    }
-
-    // Safety reports (Community reporting)
     match /safety_reports/{reportId} {
-      allow read: if true;
-      allow create: if isAuthenticated()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'unverified'; // Community reports start unverified
-      allow update: if isAuthenticated() && (
-        // Allow upvoting/downvoting
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes', 'downvotes', 'userVoted']) ||
-        // Allow community flagging
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['flagCount', 'status'])
-      );
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow get: if isValidId(reportId);
+      allow list: if resource.data.abuseFlags < 5;
+      allow create: if isValidId(reportId)
+        && isVerifiedUser()
+        && isValidSafetyReport(incoming())
+        && incoming().id == reportId
+        && incoming().authorUid == request.auth.uid
+        && incoming().verificationStatus == 'unverified'
+        && incoming().corroborationCount == 0
+        && incoming().outdatedFlags == 0
+        && incoming().abuseFlags == 0
+        && incoming().isSynthetic == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(reportId)
+        && isVerifiedUser()
+        && isValidSafetyReport(incoming())
+        && (isAdmin() || (
+          incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            (incoming().diff(existing()).affectedKeys().hasOnly(['corroborationCount', 'updatedAt']) && incoming().corroborationCount == existing().corroborationCount + 1) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['outdatedFlags', 'updatedAt']) && incoming().outdatedFlags == existing().outdatedFlags + 1) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['abuseFlags', 'updatedAt']) && incoming().abuseFlags == existing().abuseFlags + 1)
+          )
+        ));
+      allow delete: if isValidId(reportId) && isVerifiedUser() && (existing().authorUid == request.auth.uid || isAdmin());
 
-      // Report comments
       match /comments/{commentId} {
-        allow read: if true;
-        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-        allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+        allow get: if isValidId(reportId) && isValidId(commentId);
+        allow list: if isValidId(reportId) && resource.data.flaggedAbuse == false;
+        allow create: if isValidId(reportId) && isValidId(commentId)
+          && isVerifiedUser()
+          && isValidCommunityComment(incoming())
+          && exists(/databases/$(database)/documents/safety_reports/$(reportId))
+          && incoming().id == commentId
+          && incoming().reportId == reportId
+          && incoming().authorUid == request.auth.uid
+          && incoming().flaggedAbuse == false
+          && incoming().createdAt == request.time;
+        allow update: if isValidId(reportId) && isValidId(commentId)
+          && isVerifiedUser()
+          && isValidCommunityComment(incoming())
+          && (isAdmin() || (
+            incoming().id == existing().id
+            && incoming().reportId == existing().reportId
+            && incoming().authorUid == existing().authorUid
+            && incoming().createdAt == existing().createdAt
+            && incoming().diff(existing()).affectedKeys().hasOnly(['flaggedAbuse'])
+          ));
+        allow delete: if isValidId(reportId) && isValidId(commentId) && isVerifiedUser() && (existing().authorUid == request.auth.uid || isAdmin());
       }
     }
 
-    // Journeys (Strict privacy: Only journey owner can read/write)
     match /journeys/{journeyId} {
-      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow get: if isValidId(journeyId) && isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isValidId(journeyId)
+        && isVerifiedUser()
+        && isValidJourney(incoming())
+        && incoming().id == journeyId
+        && incoming().ownerUid == request.auth.uid
+        && incoming().status == 'active'
+        && incoming().startedAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(journeyId)
+        && isVerifiedUser()
+        && isValidJourney(incoming())
+        && (isAdmin() || (
+          existing().ownerUid == request.auth.uid
+          && existing().status != 'completed'
+          && incoming().id == existing().id
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().startedAt == existing().startedAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'sharedWithCircleId', 'lastLatitude', 'lastLongitude', 'deviationDetected', 'routeName', 'updatedAt'])
+        ));
+      allow delete: if isValidId(journeyId) && isVerifiedUser() && (existing().ownerUid == request.auth.uid || isAdmin());
     }
 
-    // Safe Circles
     match /safe_circles/{circleId} {
-      allow read: if isAuthenticated() && (
-        resource.data.ownerId == request.auth.uid ||
-        request.auth.uid in resource.data.memberIds
-      );
-      allow write: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow get: if isValidId(circleId) && isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isValidId(circleId)
+        && isVerifiedUser()
+        && isValidSafeCircle(incoming())
+        && incoming().id == circleId
+        && incoming().ownerUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(circleId)
+        && isVerifiedUser()
+        && isValidSafeCircle(incoming())
+        && (isAdmin() || (
+          existing().ownerUid == request.auth.uid
+          && incoming().id == existing().id
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'sharingEnabled', 'updatedAt'])
+        ));
+      allow delete: if isValidId(circleId) && isVerifiedUser() && (existing().ownerUid == request.auth.uid || isAdmin());
+
+      match /members/{memberId} {
+        allow get: if isValidId(circleId) && isValidId(memberId) && isSignedIn()
+          && (get(/databases/$(database)/documents/safe_circles/$(circleId)).data.ownerUid == request.auth.uid || isAdmin());
+        allow list: if isValidId(circleId) && isSignedIn()
+          && (resource.data.circleOwnerUid == request.auth.uid || resource.data.memberUid == request.auth.uid || isAdmin());
+        allow create: if isValidId(circleId) && isValidId(memberId)
+          && isVerifiedUser()
+          && isValidSafeCircleMember(incoming())
+          && exists(/databases/$(database)/documents/safe_circles/$(circleId))
+          && get(/databases/$(database)/documents/safe_circles/$(circleId)).data.ownerUid == request.auth.uid
+          && incoming().id == memberId
+          && incoming().circleId == circleId
+          && incoming().circleOwnerUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(circleId) && isValidId(memberId)
+          && isVerifiedUser()
+          && isValidSafeCircleMember(incoming())
+          && (isAdmin() || (
+            get(/databases/$(database)/documents/safe_circles/$(circleId)).data.ownerUid == request.auth.uid
+            && incoming().id == existing().id
+            && incoming().circleId == existing().circleId
+            && incoming().circleOwnerUid == existing().circleOwnerUid
+            && incoming().createdAt == existing().createdAt
+            && incoming().updatedAt == request.time
+            && incoming().diff(existing()).affectedKeys().hasOnly(['consentToShareLocation', 'inviteStatus', 'role', 'updatedAt'])
+          ));
+        allow delete: if isValidId(circleId) && isValidId(memberId)
+          && isVerifiedUser()
+          && (get(/databases/$(database)/documents/safe_circles/$(circleId)).data.ownerUid == request.auth.uid || isAdmin());
+      }
     }
 
-    // Emergency Alerts (SOS)
     match /emergency_alerts/{alertId} {
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow read: if isAuthenticated(); // Accessible by designated contacts receiving alert
+      allow get: if isValidId(alertId) && isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isValidId(alertId)
+        && isVerifiedUser()
+        && isValidEmergencyAlert(incoming())
+        && incoming().id == alertId
+        && incoming().ownerUid == request.auth.uid
+        && incoming().status in ['countdown', 'active']
+        && incoming().triggeredAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(alertId)
+        && isVerifiedUser()
+        && isValidEmergencyAlert(incoming())
+        && (isAdmin() || (
+          existing().ownerUid == request.auth.uid
+          && !(existing().status in ['resolved', 'cancelled'])
+          && incoming().id == existing().id
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().triggeredAt == existing().triggeredAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'deliveryChannelStatus', 'latitude', 'longitude', 'updatedAt'])
+        ));
+      allow delete: if isValidId(alertId) && isVerifiedUser() && isAdmin();
     }
 
-    // Verified Help Locations & SafeHeroes Directory
-    match /help_locations/{id} {
-      allow read: if true;
-      allow write: if false;
+    match /community_posts/{postId} {
+      allow get: if isValidId(postId);
+      allow list: if resource.data.abuseFlags < 5;
+      allow create: if isValidId(postId)
+        && isVerifiedUser()
+        && isValidCommunityPost(incoming())
+        && incoming().id == postId
+        && incoming().authorUid == request.auth.uid
+        && incoming().helpfulCount == 0
+        && incoming().abuseFlags == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(postId)
+        && isVerifiedUser()
+        && isValidCommunityPost(incoming())
+        && (isAdmin() || (
+          incoming().id == existing().id
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            (incoming().diff(existing()).affectedKeys().hasOnly(['helpfulCount', 'updatedAt']) && incoming().helpfulCount == existing().helpfulCount + 1) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['abuseFlags', 'updatedAt']) && incoming().abuseFlags == existing().abuseFlags + 1)
+          )
+        ));
+      allow delete: if isValidId(postId) && isVerifiedUser() && (existing().authorUid == request.auth.uid || isAdmin());
     }
 
-    match /safe_heroes/{id} {
-      allow read: if true;
-      allow write: if false;
+    match /organizations/{orgId} {
+      allow get: if isValidId(orgId);
+      allow list: if resource.data.verificationStatus in ['verified_public_helpline', 'unverified_directory'];
+      allow write: if isAdmin();
     }
   }
 }
-

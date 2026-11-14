@@ -1,4 +1,5 @@
 @echo off
-echo Starting SafeWalk...
-node server.js
+echo Starting Rahat Mobile App...
+set EXPO_NO_TELEMETRY=1
+call npm run dev
 pause

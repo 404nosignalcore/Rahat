@@ -1,0 +1,577 @@
+{
+  "entities": {
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Publicly readable non-PII user display metadata for SafeCircle and community attribution.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "photoUrl": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "preferredLanguage": {
+          "type": "string",
+          "enum": ["en", "hi"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "preferredLanguage", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Strictly owner-only PII and privacy/security preferences isolated from public reads.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "locationConsent": {
+          "type": "boolean"
+        },
+        "backgroundTrackingConsent": {
+          "type": "boolean"
+        },
+        "notificationConsent": {
+          "type": "boolean"
+        },
+        "sosCountdownSeconds": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "locationConsent", "backgroundTrackingConsent", "notificationConsent", "sosCountdownSeconds", "updatedAt"]
+    },
+    "EmergencyContact": {
+      "title": "EmergencyContact",
+      "description": "Trusted emergency contact owned by a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "relationship": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 24
+        },
+        "verificationStatus": {
+          "type": "string",
+          "enum": ["unverified", "pending", "verified"]
+        },
+        "notifyOnSOS": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerUid", "name", "relationship", "phone", "verificationStatus", "notifyOnSOS", "createdAt", "updatedAt"]
+    },
+    "SafetyReport": {
+      "title": "SafetyReport",
+      "description": "Community-submitted safety report with transparent verification tier and coarse/map location.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["harassment", "stalking", "verbal_abuse", "physical_assault", "poor_lighting", "secluded_area", "unsafe_transport", "suspicious_activity"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 140
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 1000
+        },
+        "areaLabel": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "severity": {
+          "type": "number"
+        },
+        "verificationStatus": {
+          "type": "string",
+          "enum": ["unverified", "under_review", "community_corroborated", "authorized_verified"]
+        },
+        "corroborationCount": {
+          "type": "number"
+        },
+        "outdatedFlags": {
+          "type": "number"
+        },
+        "abuseFlags": {
+          "type": "number"
+        },
+        "isSynthetic": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "authorUid", "category", "title", "description", "areaLabel", "latitude", "longitude", "severity", "verificationStatus", "corroborationCount", "outdatedFlags", "abuseFlags", "isSynthetic", "createdAt", "updatedAt"]
+    },
+    "CommunityComment": {
+      "title": "CommunityComment",
+      "description": "Location experience comment attached to a safety report or community post.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reportId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorDisplay": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "body": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 500
+        },
+        "flaggedAbuse": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "reportId", "authorUid", "authorDisplay", "body", "flaggedAbuse", "createdAt"]
+    },
+    "Journey": {
+      "title": "Journey",
+      "description": "Active or completed monitored route journey belonging to a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "originLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "destinationLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "routeName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "paused", "completed", "sos_escalated"]
+        },
+        "sharedWithCircleId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "lastLatitude": {
+          "type": "number"
+        },
+        "lastLongitude": {
+          "type": "number"
+        },
+        "deviationDetected": {
+          "type": "boolean"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerUid", "originLabel", "destinationLabel", "routeName", "status", "lastLatitude", "lastLongitude", "deviationDetected", "startedAt", "updatedAt"]
+    },
+    "SafeCircle": {
+      "title": "SafeCircle",
+      "description": "Trusted personal circle for consent-gated location and journey sharing.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "sharingEnabled": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerUid", "name", "sharingEnabled", "createdAt", "updatedAt"]
+    },
+    "SafeCircleMember": {
+      "title": "SafeCircleMember",
+      "description": "Subcollection member record for a SafeCircle.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "circleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "circleOwnerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "memberUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "role": {
+          "type": "string",
+          "enum": ["owner", "trusted_member", "invited"]
+        },
+        "consentToShareLocation": {
+          "type": "boolean"
+        },
+        "inviteStatus": {
+          "type": "string",
+          "enum": ["accepted", "pending", "revoked"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "circleId", "circleOwnerUid", "displayName", "role", "consentToShareLocation", "inviteStatus", "createdAt", "updatedAt"]
+    },
+    "EmergencyAlert": {
+      "title": "EmergencyAlert",
+      "description": "Audited SOS emergency alert record with real delivery state.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["countdown", "active", "cancelled", "resolved"]
+        },
+        "deliveryChannelStatus": {
+          "type": "string",
+          "enum": ["pending", "sent", "partial_failure", "failed", "offline_fallback"]
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "mapShareUrl": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "triggeredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerUid", "status", "deliveryChannelStatus", "latitude", "longitude", "mapShareUrl", "triggeredAt", "updatedAt"]
+    },
+    "CommunityPost": {
+      "title": "CommunityPost",
+      "description": "Public safety community feed post with coarse area label only.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorDisplay": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "coarseArea": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "topic": {
+          "type": "string",
+          "enum": ["area_update", "suspicious_activity", "safe_tip", "lighting_alert"]
+        },
+        "body": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 800
+        },
+        "helpfulCount": {
+          "type": "number"
+        },
+        "abuseFlags": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "authorUid", "authorDisplay", "coarseArea", "topic", "body", "helpfulCount", "abuseFlags", "createdAt", "updatedAt"]
+    },
+    "SafeHeroOrganization": {
+      "title": "SafeHeroOrganization",
+      "description": "Public verified support organization or official helpline directory entry.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "assistanceType": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "contactPhone": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "serviceLocation": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "officialWebsite": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "verificationStatus": {
+          "type": "string",
+          "enum": ["verified_public_helpline", "unverified_directory"]
+        }
+      },
+      "required": ["id", "name", "assistanceType", "contactPhone", "serviceLocation", "officialWebsite", "verificationStatus"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Publicly readable non-PII user display profile."
+    },
+    "/users/{userId}/private/info": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Owner-only PII (email, phone) and consent preferences."
+    },
+    "/users/{userId}/emergency_contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/EmergencyContact" },
+      "description": "User's trusted emergency contacts."
+    },
+    "/safety_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/SafetyReport" },
+      "description": "Community safety reports with transparent verification status."
+    },
+    "/safety_reports/{reportId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/CommunityComment" },
+      "description": "Comments attached to a safety report."
+    },
+    "/journeys/{journeyId}": {
+      "schema": { "$ref": "#/entities/Journey" },
+      "description": "User-owned route monitoring journeys."
+    },
+    "/safe_circles/{circleId}": {
+      "schema": { "$ref": "#/entities/SafeCircle" },
+      "description": "Trusted SafeCircle groups."
+    },
+    "/safe_circles/{circleId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/SafeCircleMember" },
+      "description": "SafeCircle membership and sharing consent records."
+    },
+    "/emergency_alerts/{alertId}": {
+      "schema": { "$ref": "#/entities/EmergencyAlert" },
+      "description": "User SOS alerts with real delivery state tracking."
+    },
+    "/community_posts/{postId}": {
+      "schema": { "$ref": "#/entities/CommunityPost" },
+      "description": "Moderated Safety Community feed posts (coarse area only)."
+    },
+    "/organizations/{orgId}": {
+      "schema": { "$ref": "#/entities/SafeHeroOrganization" },
+      "description": "SafeHeroes support organizations directory."
+    }
+  }
+}

@@ -1,114 +1,95 @@
-# SafeWalk 🛡️
+# Rahat (राहत) 🛡️
 ### AI-Powered Women's Personal Safety & Community Mobile Application
 
-> *"Your safety companion, before, during, and after every journey."*
+> *"A step towards freedom. A movement towards safety."*  
+> *"आज़ादी की ओर एक कदम। सुरक्षा की ओर एक आंदोलन।"*
 
-SafeWalk is a production-oriented, privacy-conscious mobile application built with **React Native**, **Expo**, **TypeScript**, and **Firebase**. It provides preventive awareness, explainable safety zones, intelligent route monitoring, automatic route deviation detection, multi-contact SOS emergency dispatch with offline SMS fallback, and community-powered safety intelligence.
-
----
-
-## 🌟 Key Capabilities & Architectural Highlights
-
-### 1. Exactly Five Bottom Navigation Tabs + SafeHeroes Entry Point
-- **Tab 1: SafeZone** — Home area dashboard with interactive vector map, Green/Yellow/Red zone scoring with explainable indicators (lighting, crowd density, police presence, CCTV coverage), community reporting with verification stages (`unverified`, `under_review`, `corroborated`, `verified_official`), and corroboration comments.
-- **Tab 2: Route** — Multi-route comparison engine evaluating distance, duration, and safety score (lighting % and CCTV coverage). Real-time GPS journey tracking with mathematical cross-track deviation detection.
-- **Tab 3: SOS (Elevated Center Action)** — A visually enlarged 64dp emergency button. Tapping opens a 5-second countdown with sensory feedback, instant cancel option for accidental taps, multi-contact dispatch, direct 112/911 emergency dialer, and an offline cellular SMS fallback.
-- **Tab 4: Connect** — 3 segmented safety networks:
-  - **SafeCircle**: Consensual live location sharing with trusted family/friends.
-  - **Nearby Help**: Direct directory of police stations, hospitals, pink booths, and 24/7 pharmacies with distance, one-tap calling, and directions.
-  - **Safety Community**: Experience sharing and advice without exposing precise private coordinates.
-- **Tab 5: Profile & Security** — Emergency contacts CRUD, granular location permission toggles, background tracking consent, route deviation corridor slider (50m–150m), countdown adjuster, privacy policy, and one-tap account deletion.
-- **SafeHeroes (Top-Right Action)** — Fast-access modal providing verified national emergency helplines (112, 1091, 181, 1930) and verified women's crisis centers.
+**Rahat** is a production-grade, privacy-conscious mobile application built with **React Native**, **Expo SDK 58**, **TypeScript**, and **Firebase**. It provides preventive awareness, explainable safety zones, intelligent route monitoring, anti-false-alarm route deviation detection, multi-contact SOS emergency dispatch with offline SMS fallback, bilingual English & Hindi support, and community-powered safety intelligence.
 
 ---
 
-## 📐 Route Deviation Detection Algorithm
+## 🌟 Key Features & Architecture
 
-SafeWalk employs a **Cross-Track Distance Algorithm** based on spherical vector geodesics (Haversine cross-track):
-1. **Perpendicular Distance**: Computes exact distance in meters from the user's current GPS location to the active route polyline segments.
-2. **Buffer Corridor**: Configurable buffer (default 75m) to eliminate false alarms caused by GPS drift or urban canyons.
-3. **Temporal Filtering**: Requires at least 2 consecutive out-of-corridor GPS readings spanning $\ge 20$ seconds before displaying the prompt:
-   > *"Your location appears to be different from your planned route. Are you okay?"*
-4. **Four Distinct Resolution Actions**:
-   - **I'm Safe**: Suppresses warnings for 5 minutes and continues journey.
-   - **Recalculate Route**: Dynamically routes a new safe path from the current position.
-   - **Share My Location**: Pushes real-time coordinates to SafeCircle.
+### 1. Bilingual Support (English & हिन्दी)
+- One-tap language toggle on the top navigation bar (`EN` ⇄ `हिं`).
+- All tabs, category labels, risk levels, emergency disclosures, and deviation alerts are fully translated into fluent Hindi and English.
+
+### 2. Five Core Bottom Navigation Tabs
+- **Tab 1: SafeZone (सेफज़ोन)**:
+  - Real-world Delhi NCR geographic safety zones (Connaught Place, Janpath, Mandi House, Hauz Khas Village, Saket District Centre, Cyber City Gurgaon, etc.).
+  - **Dynamic Time-of-Day Risk Modifier**: Interactive hour slider simulating risk scores across day, evening, night, and late-night conditions.
+  - Transparent verification tiers: `unverified`, `under_review`, `community_corroborated`, and `authorized_verified`.
+  - Corroboration ("I was here / Confirm"), abuse flagging, and community comment threads.
+- **Tab 2: Route (मार्ग)**:
+  - Multi-route comparison: **Safest Route** (max lighting & CCTV), **Quickest Route**, and **Well-Lit Alternative**.
+  - Real-time GPS journey tracking with mathematical cross-track deviation detection.
+  - GPS loss simulation and recovery testing.
+  - SafeCircle live journey sharing.
+- **Tab 3: Emergency SOS (आपातकालीन)**:
+  - Raised, high-contrast emergency trigger with configurable countdown.
+  - Direct Indian emergency dialers: **112** (National Emergency), **1091** (Women Helpline), **100** (Police), **102** (Ambulance).
+  - One-tap WhatsApp & SMS alert dispatch containing the exact live Google Maps coordinate link.
+  - Loud sensory audio alarm / siren toggle.
+- **Tab 4: Connect (कनेक्ट)**:
+  - **SafeCircle**: Live consensual location sharing with family, roommates, or college friends with granular member consent switches.
+  - **Nearby Help / Safe Havens**: 24/7 pharmacies, pink police booths, hospital ERs, and metro help desks with direct calling.
+  - **Safety Community**: Coarse-area safety tips and lighting alerts without exposing private coordinates.
+- **Tab 5: Profile & Security (प्रोफ़ाइल)**:
+  - Profile identity and emergency contacts CRUD.
+  - Granular privacy consents (location consent, background tracking, notification dispatch).
+  - **Rahat Wearables Ecosystem**: Simulated companion state for open-hardware Smartwatches and Safety Rings (battery, firmware, discreet BLE trigger simulation).
+  - Privacy-compliant account data deletion (GDPR right to be forgotten).
+
+### 3. SafeHeroes Directory (Top-Right Action)
+- Verified directory of statutory support helplines (NCW 7827170170, Delhi Police Special Cell for Women, Cyber Crime 1930, One Stop Crisis Centers).
+
+---
+
+## 📐 Anti-False-Alarm Route Deviation Engine
+
+Rahat employs a **Spherical Cross-Track Distance Algorithm**:
+1. **Perpendicular Distance**: Computes exact geodesic distance from user's current GPS location to planned path segments.
+2. **Urban Buffer Corridor**: Default 75m buffer to eliminate false alarms from tall buildings or GPS drift.
+3. **Temporal Filtering**: Requires consecutive off-route readings before prompting the user.
+4. **User-Controlled Resolutions**:
+   - **I'm Safe**: Acknowledges deviation and applies a 120-second cooldown.
+   - **Recalculate Route**: Dynamically routes a new safe path.
+   - **Share Location**: Pushes coordinates to SafeCircle.
    - **Activate SOS**: Triggers immediate emergency alert.
-
-*Safety Policy: SafeWalk NEVER automatically triggers an emergency SOS alert solely due to GPS deviation.*
-
----
-
-## 🚨 Emergency SOS & Tiered Offline Fallback
-
-1. **Configurable Countdown**: 5-second default countdown with large visual counter and haptic feedback.
-2. **Delivery Guarantee**:
-   - **Tier 1 (Online)**: Broadcasts real-time coordinates to Cloud Firestore and triggers push notifications to SafeCircle.
-   - **Tier 2 (Offline Fallback)**: If network connectivity is unavailable, automatically composes and launches native SMS dispatch with a Google Maps coordinate link to all selected contacts and opens the native dialer with `112`.
-3. **Truth in Delivery**: The UI shows honest delivery receipts (`sent_sms`, `delivered_cloud`, `pending`). It **never** fabricates a claim that police have been dispatched without official API confirmation.
-
----
-
-## 🗄️ Database Architecture & Security Rules
-
-Designed with strict least-privilege Firestore rules:
-- `users/{userId}`: Only the authenticated user can read or write their personal data.
-- `safety_reports`: Public read; authenticated create; all community reports begin as `unverified` to prevent misinformation.
-- `journeys`: Private to the user; automatically archived upon completion.
-- `safe_circles`: Only circle owners and designated members can view active locations.
+*Safety Policy: Rahat NEVER automatically triggers an emergency SOS alert solely due to GPS deviation.*
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js `v18+` or `v20+` (tested on Node v26)
-- Expo CLI
-
-### Installation
-```bash
-# Clone the repository
-cd rahat1
-
-# Install dependencies
-npm install --legacy-peer-deps
-```
+- Node.js 18+ (tested with Node 20/22)
+- PowerShell / Command Prompt on Windows, or Bash on macOS/Linux
+- **Expo Go** app on your iPhone or Android phone (SDK 58 compatible)
 
 ### Running the App
 ```bash
-# Start Expo development server
-npm start
-
-# Run on Android emulator / connected device
-npm run android
-
-# Run in Web browser preview
-npm run web
+# Start development server on port 8081
+npm run dev
 ```
+
+> **Automatic Port Management**: The project includes `scripts/free-port.js` which automatically terminates any stale process occupying port 8081 before starting the server.
 
 ### Running Tests
 ```bash
-# Run TypeScript compilation check
-npm run typecheck
-
-# Run Jest unit test suite
+# Run Jest unit test suites
 npm test
+
+# Run TypeScript type check
+npm run typecheck
 ```
 
 ---
 
-## ⚙️ Environment Configuration
+## 🔒 Security & Privacy Commitments
+- **No Silent Tracking**: Location is only captured during active user consent or when actively following a route.
+- **Truth in Emergency Dispatch**: The app transparently reflects delivery status and provides instant offline SMS / native dialer fallbacks.
+- **No Crime Profiling**: Safety scores reflect lighting, crowd density, CCTV, verified safe havens, and community corroborations—never socio-demographic biases.
 
-Copy `.env.example` to `.env`:
-```env
-EXPO_PUBLIC_FIREBASE_API_KEY=your_key
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
-EXPO_PUBLIC_DEFAULT_EMERGENCY_NUMBER=112
-```
-
-> **Note**: When Firebase keys are omitted or set to placeholder values, SafeWalk automatically activates its built-in **Offline Mock & Local Adapter**, allowing full feature testing with realistic seed data immediately.
-
+---
+© 2026 Rahat (राहत). Open Source Initiative for Women's Safety.

@@ -1,6 +1,8 @@
 /**
- * SafeWalk Design Tokens & Theme System
+ * Rahat Design Tokens & Theme System
  */
+
+export * from './tokens';
 
 export const Colors = {
   // Brand & Accent
