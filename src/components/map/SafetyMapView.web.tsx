@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import L from 'leaflet';
 import { IncidentReport, RiskZone, RouteOption, SafeHaven } from '../../types/safety';
+import { SafetyMapView as SafetyMapViewNative } from './SafetyMapView.native';
 
 export interface SafetyMapViewProps {
   height?: number;
@@ -22,28 +22,31 @@ const RISK_HEX = {
   danger: { stroke: '#DC2626', fill: '#EF4444' },
 };
 
-export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
-  height = 280,
-  zones = [],
-  reports = [],
-  safeHavens = [],
-  routes = [],
-  selectedRouteId,
-  userLocation,
-  onSelectZone,
-  onSelectReport,
-  onPickCoordinate,
-  pickMode = false,
-}) => {
+export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
+  const {
+    height = 280,
+    zones = [],
+    reports = [],
+    safeHavens = [],
+    routes = [],
+    selectedRouteId,
+    userLocation,
+    onSelectZone,
+    onSelectReport,
+    onPickCoordinate,
+    pickMode = false,
+  } = props;
+
+  const L = typeof window !== 'undefined' ? (window as any).L : null;
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const layerGroupRef = useRef<L.LayerGroup | null>(null);
+  const mapRef = useRef<any>(null);
+  const layerGroupRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!L || !containerRef.current || mapRef.current) return;
 
     const map = L.map(containerRef.current, {
-      center: [28.6295, 77.2240],
+      center: [28.6295, 77.224],
       zoom: 15,
       zoomControl: true,
     });
@@ -62,13 +65,14 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
       mapRef.current = null;
       layerGroupRef.current = null;
     };
-  }, []);
+  }, [L]);
 
   useEffect(() => {
+    if (!L) return;
     const map = mapRef.current;
     if (!map) return;
 
-    const handleClick = (e: L.LeafletMouseEvent) => {
+    const handleClick = (e: any) => {
       if (pickMode && onPickCoordinate) {
         onPickCoordinate(e.latlng.lat, e.latlng.lng);
       }
@@ -77,9 +81,10 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
     return () => {
       map.off('click', handleClick);
     };
-  }, [pickMode, onPickCoordinate]);
+  }, [L, pickMode, onPickCoordinate]);
 
   useEffect(() => {
+    if (!L) return;
     const group = layerGroupRef.current;
     const map = mapRef.current;
     if (!group || !map) return;
@@ -132,7 +137,9 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
         fillColor: '#6D5BD0',
         fillOpacity: 0.95,
       });
-      marker.bindTooltip(`${haven.name} (${haven.sourceTier === 'verified' ? 'Verified' : 'Community'})`);
+      marker.bindTooltip(
+        `${haven.name} (${haven.sourceTier === 'verified' ? 'Verified' : 'Community'})`
+      );
       marker.addTo(group);
     });
 
@@ -157,7 +164,11 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [zones, reports, safeHavens, routes, selectedRouteId, userLocation]);
+  }, [L, zones, reports, safeHavens, routes, selectedRouteId, userLocation]);
+
+  if (!L) {
+    return <SafetyMapViewNative {...props} />;
+  }
 
   return (
     <div
