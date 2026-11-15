@@ -201,33 +201,7 @@ export const SosScreen: React.FC = () => {
       {/* SECTION 2: Centerpiece SOS Surface */}
       <View style={styles.centerSection}>
         <View style={styles.centerInner}>
-          {/* If Community SOS is active, display the Live Rescue View prominently */}
-          {activeCommunitySos &&
-          !activeCommunitySos.isCancelled &&
-          activeCommunitySos.status !== 'resolved' ? (
-            <View style={{ marginBottom: 24 }}>
-              <VictimLiveRescueView
-                request={activeCommunitySos}
-                onCancelRequest={cancelCommunitySos}
-                onResolveRequest={resolveCommunitySosRequest}
-                onReportResponder={reportCommunityResponder}
-                themeMode={themeMode}
-              />
-            </View>
-          ) : (
-            /* Otherwise, show the prominent "GET HELP FROM NEARBY PEOPLE" Community SOS Card */
-            <View style={{ marginBottom: 24 }}>
-              <CommunitySosCard
-                onTriggerCommunitySos={(cat, desc) => {
-                  triggerCommunitySos(cat, desc);
-                }}
-                onSimulateIncomingAlert={simulateIncomingRescueAlert}
-                currentCoordinates={{ lat: currentLocation.lat, lng: currentLocation.lng }}
-                themeMode={themeMode}
-              />
-            </View>
-          )}
-
+          {/* Monumental Red "ACTIVATE SOS" Button Card (Placed Prominently at the Top) */}
           <View
             style={[
               styles.sosTriggerCard,
@@ -239,6 +213,7 @@ export const SosScreen: React.FC = () => {
                     : isDark
                     ? '#272729'
                     : Colors.hairline,
+                marginBottom: 24,
               },
             ]}
           >
@@ -369,7 +344,7 @@ export const SosScreen: React.FC = () => {
                 </View>
               </View>
             ) : (
-              /* Idle Standby State with Monumental SOS Button */
+              /* Idle Standby State with Monumental Red SOS Button */
               <View style={styles.idleBlock}>
                 <Pressable
                   accessibilityRole="button"
@@ -413,6 +388,32 @@ export const SosScreen: React.FC = () => {
               </View>
             )}
           </View>
+
+          {/* Community SOS Rescue Network (Placed Directly Below) */}
+          {activeCommunitySos &&
+          !activeCommunitySos.isCancelled &&
+          activeCommunitySos.status !== 'resolved' ? (
+            <View style={{ marginBottom: 24 }}>
+              <VictimLiveRescueView
+                request={activeCommunitySos}
+                onCancelRequest={cancelCommunitySos}
+                onResolveRequest={resolveCommunitySosRequest}
+                onReportResponder={reportCommunityResponder}
+                themeMode={themeMode}
+              />
+            </View>
+          ) : (
+            <View style={{ marginBottom: 24 }}>
+              <CommunitySosCard
+                onTriggerCommunitySos={(cat, desc) => {
+                  triggerCommunitySos(cat, desc);
+                }}
+                onSimulateIncomingAlert={simulateIncomingRescueAlert}
+                currentCoordinates={{ lat: currentLocation.lat, lng: currentLocation.lng }}
+                themeMode={themeMode}
+              />
+            </View>
+          )}
         </View>
       </View>
 
