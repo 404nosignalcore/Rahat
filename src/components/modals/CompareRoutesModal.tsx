@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontFamily: TypographyStyles.headlineStrong.fontFamily,
+    fontFamily: TypographyStyles.bodyStrong.fontFamily,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,

@@ -179,7 +179,7 @@ export const Typography = {
 /**
  * Text Style Presets according to DESIGN.md
  */
-export const TypographyStyles: Record<string, TextStyle> = {
+const RAW_TYPOGRAPHY_STYLES: Record<string, TextStyle> = {
   heroDisplay: {
     fontFamily: Typography.fontFamily.display,
     fontSize: 56,
@@ -221,6 +221,13 @@ export const TypographyStyles: Record<string, TextStyle> = {
     fontWeight: '600',
     lineHeight: 25,
     letterSpacing: 0.231,
+  },
+  headlineStrong: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: 21,
+    fontWeight: '700',
+    lineHeight: 25,
+    letterSpacing: -0.3,
   },
   bodyStrong: {
     fontFamily: Typography.fontFamily.body,
@@ -293,6 +300,17 @@ export const TypographyStyles: Record<string, TextStyle> = {
     letterSpacing: -0.12,
   },
 };
+
+export const TypographyStyles: Record<string, TextStyle> = typeof Proxy !== 'undefined'
+  ? new Proxy(RAW_TYPOGRAPHY_STYLES, {
+      get(target, prop: string) {
+        if (typeof prop === 'string' && prop in target) {
+          return target[prop];
+        }
+        return target.body; // Safe fallback so accessing undefined styles never throws TypeError
+      },
+    })
+  : RAW_TYPOGRAPHY_STYLES;
 
 /**
  * Elevation & Depth (DESIGN.md)
