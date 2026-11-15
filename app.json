@@ -2,6 +2,7 @@
   "expo": {
     "name": "Rahat",
     "slug": "rahat",
+    "owner": "404nosignalcore",
     "scheme": "rahat",
     "version": "1.0.0",
     "orientation": "portrait",
