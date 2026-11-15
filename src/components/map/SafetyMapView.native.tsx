@@ -25,9 +25,9 @@ export interface SafetyMapViewProps {
 }
 
 const RISK_THEME = {
-  safe: { color: '#15803D', bg: 'rgba(34, 197, 94, 0.16)', label: 'SAFE' },
-  caution: { color: '#B45309', bg: 'rgba(245, 158, 11, 0.16)', label: 'CAUTION' },
-  danger: { color: '#DC2626', bg: 'rgba(239, 68, 68, 0.18)', label: 'CONCERN' },
+  safe: { color: '#34C759', bg: 'rgba(52, 199, 89, 0.16)', label: 'SAFE' },
+  caution: { color: '#FF9500', bg: 'rgba(255, 149, 0, 0.16)', label: 'CAUTION' },
+  danger: { color: '#FF3B30', bg: 'rgba(255, 59, 48, 0.16)', label: 'CONCERN' },
 };
 
 export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
@@ -184,16 +184,16 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    backgroundColor: '#EAEFF5',
-    borderRadius: 16,
+    backgroundColor: '#F5F5F7',
+    borderRadius: 18,
     overflow: 'hidden',
     position: 'relative',
-    borderWidth: 1,
-    borderColor: '#DCE2EC',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D2D2D7',
   },
   gridOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#EDF2F7',
+    backgroundColor: '#F5F5F7',
   },
   gridLineH1: {
     position: 'absolute',
@@ -254,10 +254,10 @@ const styles = StyleSheet.create({
   routeTrackPath: {
     width: '70%',
     height: 5,
-    backgroundColor: '#6D5BD0',
+    backgroundColor: '#0071E3',
     borderRadius: 3,
     transform: [{ rotate: '-25deg' }],
-    opacity: 0.85,
+    opacity: 0.9,
   },
   markerPin: {
     position: 'absolute',
@@ -309,16 +309,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#6D5BD0',
+    borderRadius: 9999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#0071E3',
   },
   pickModeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#6D5BD0',
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#0071E3',
+    letterSpacing: -0.15,
   },
   mapHud: {
     position: 'absolute',
@@ -331,13 +332,13 @@ const styles = StyleSheet.create({
   },
   legendContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: 9999,
     gap: 7,
-    borderWidth: 1,
-    borderColor: '#DCE2EC',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D2D2D7',
   },
   legendItem: {
     flexDirection: 'row',
@@ -352,22 +353,24 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#334155',
+    color: '#1D1D1F',
+    letterSpacing: -0.1,
   },
   coordinatesPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: 9999,
     gap: 4,
-    borderWidth: 1,
-    borderColor: '#DCE2EC',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D2D2D7',
   },
   coordinatesText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#475569',
+    color: '#86868B',
+    letterSpacing: -0.1,
   },
 });

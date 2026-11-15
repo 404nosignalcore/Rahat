@@ -51,36 +51,36 @@ export interface AppTheme {
 export const LIGHT_THEME: AppTheme = {
   mode: 'light',
   colors: {
-    bg: '#F4F6FA',
-    surface: '#FFFFFF',
-    surfaceAlt: '#EEF1F7',
-    border: '#DCE2EC',
-    textPrimary: '#0F172A',
-    textSecondary: '#334155',
-    textMuted: '#64748B',
-    navyPrimary: '#0F172A',
+    bg: '#F5F5F7',               // Apple Light Gray Parchment Canvas
+    surface: '#FFFFFF',          // Apple Card Tile White
+    surfaceAlt: '#E8E8ED',       // Apple Inset Grouped Surface
+    border: '#D2D2D7',           // Apple Hairline Divider
+    textPrimary: '#1D1D1F',      // Apple Ink
+    textSecondary: '#424245',    // Apple Secondary Ink
+    textMuted: '#86868B',        // Apple Caption / Muted
+    navyPrimary: '#0071E3',      // Apple Action Blue
     navyText: '#FFFFFF',
-    accentViolet: '#6D5BD0',
-    accentVioletSoft: '#EFEBFD',
-    safeGreen: '#15803D',
-    safeBg: '#DCFCE7',
-    safeBorder: '#86EFAC',
-    cautionAmber: '#B45309',
-    cautionBg: '#FEF3C7',
-    cautionBorder: '#FCD34D',
-    dangerRed: '#DC2626',
-    dangerBg: '#FEE2E2',
-    dangerBorder: '#FCA5A5',
+    accentViolet: '#0071E3',     // Apple Accent Action Blue
+    accentVioletSoft: '#E8F2FF', // Apple Soft Tint Blue
+    safeGreen: '#34C759',        // Apple System Green
+    safeBg: '#EBF9EE',
+    safeBorder: '#A3E7B7',
+    cautionAmber: '#FF9500',     // Apple System Orange
+    cautionBg: '#FFF5E5',
+    cautionBorder: '#FFD188',
+    dangerRed: '#FF3B30',        // Apple System Red
+    dangerBg: '#FFEBEA',
+    dangerBorder: '#FFB2AE',
     tabBarBg: '#FFFFFF',
-    tabBarBorder: '#DCE2EC',
-    overlayBg: 'rgba(15, 23, 42, 0.56)',
+    tabBarBorder: '#E5E5EA',
+    overlayBg: 'rgba(0, 0, 0, 0.42)',
   },
   radius: {
     sm: 8,
     md: 12,
-    lg: 16,
-    xl: 24,
-    full: 9999,
+    lg: 18,                      // Apple Standard Rounded Tile (18px)
+    xl: 24,                      // Apple Modal / Sheet (24px)
+    full: 9999,                  // Apple Capsule Pill
   },
   spacing: {
     xs: 4,
@@ -90,38 +90,38 @@ export const LIGHT_THEME: AppTheme = {
     xl: 24,
   },
   typography: {
-    displayFont: 'Plus Jakarta Sans, DM Sans, system-ui, sans-serif',
-    bodyFont: 'DM Sans, system-ui, sans-serif',
-    monoFont: 'JetBrains Mono, monospace',
+    displayFont: 'System, -apple-system, SF Pro Display, Helvetica Neue, sans-serif',
+    bodyFont: 'System, -apple-system, SF Pro Text, Helvetica Neue, sans-serif',
+    monoFont: 'SF Mono, Menlo, Courier New, monospace',
   },
 };
 
 export const DARK_THEME: AppTheme = {
   mode: 'dark',
   colors: {
-    bg: '#090D16',
-    surface: '#111827',
-    surfaceAlt: '#1B2436',
-    border: '#263147',
-    textPrimary: '#F8FAFC',
-    textSecondary: '#CBD5E1',
-    textMuted: '#94A3B8',
-    navyPrimary: '#1E293B',
-    navyText: '#F8FAFC',
-    accentViolet: '#8B7CF6',
-    accentVioletSoft: '#251F47',
-    safeGreen: '#22C55E',
-    safeBg: '#0D2B1B',
-    safeBorder: '#166534',
-    cautionAmber: '#F59E0B',
-    cautionBg: '#2E2009',
-    cautionBorder: '#92400E',
-    dangerRed: '#EF4444',
-    dangerBg: '#361215',
-    dangerBorder: '#991B1B',
-    tabBarBg: '#0F172A',
-    tabBarBorder: '#1E293B',
-    overlayBg: 'rgba(2, 6, 23, 0.72)',
+    bg: '#000000',               // Apple True OLED Black Canvas
+    surface: '#1C1C1E',          // Apple Grouped Dark Card
+    surfaceAlt: '#2C2C2E',       // Apple Inset Secondary
+    border: '#38383A',           // Apple Dark Hairline
+    textPrimary: '#FFFFFF',      // Apple Pure White Text
+    textSecondary: '#EBEBF5',    // Apple Secondary White
+    textMuted: '#8E8E93',        // Apple Tertiary Gray
+    navyPrimary: '#2997FF',      // Apple Primary on Dark
+    navyText: '#FFFFFF',
+    accentViolet: '#2997FF',     // Apple Accent Blue on Dark
+    accentVioletSoft: '#142940', // Apple Soft Dark Blue
+    safeGreen: '#30D158',        // Apple System Green Dark
+    safeBg: '#0B2813',
+    safeBorder: '#1A6A32',
+    cautionAmber: '#FF9F0A',     // Apple System Orange Dark
+    cautionBg: '#2F1F05',
+    cautionBorder: '#7B4F09',
+    dangerRed: '#FF453A',        // Apple System Red Dark
+    dangerBg: '#300D0C',
+    dangerBorder: '#7F1A17',
+    tabBarBg: '#161617',         // Apple Dark Chrome
+    tabBarBorder: '#272729',
+    overlayBg: 'rgba(0, 0, 0, 0.72)',
   },
   radius: LIGHT_THEME.radius,
   spacing: LIGHT_THEME.spacing,
