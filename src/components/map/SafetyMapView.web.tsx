@@ -22,6 +22,14 @@ const RISK_HEX = {
   danger: { stroke: '#ff3b30', fill: '#ff3b30' },
 };
 
+export type GoogleMapType = 'roadmap' | 'satellite' | 'terrain';
+
+const GOOGLE_MAP_LYRS: Record<GoogleMapType, string> = {
+  roadmap: 'm',
+  satellite: 'y',
+  terrain: 'p',
+};
+
 export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
   const {
     height = 360,
@@ -41,10 +49,12 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
     return typeof window !== 'undefined' && Boolean((window as any).L);
   });
   const [currentZoom, setCurrentZoom] = useState<number>(15);
+  const [mapType, setMapType] = useState<GoogleMapType>('roadmap');
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const layerGroupRef = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
 
   // Dynamic injection of Leaflet CSS & JS if not present
   useEffect(() => {
@@ -107,15 +117,17 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
       touchZoom: true,
     });
 
-    // CartoDB Voyager tiles: crisp, modern, Apple Maps-like aesthetic
-    L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    // Official Google Maps Tile Layer
+    const lyrs = GOOGLE_MAP_LYRS[mapType];
+    const googleTileLayer = L.tileLayer(
+      `https://mt{s}.google.com/vt/lyrs=${lyrs}&x={x}&y={y}&z={z}`,
       {
-        attribution: '&copy; OpenStreetMap contributors, &copy; CARTO',
-        subdomains: 'abcd',
-        maxZoom: 19,
+        attribution: '&copy; Google Maps',
+        subdomains: ['0', '1', '2', '3'],
+        maxZoom: 20,
       }
     ).addTo(map);
+    tileLayerRef.current = googleTileLayer;
 
     const group = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -134,8 +146,34 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
       map.remove();
       mapRef.current = null;
       layerGroupRef.current = null;
+      tileLayerRef.current = null;
     };
   }, [leafletReady]);
+
+  // Dynamic Google Maps Layer Switcher (Roadmap, Satellite Hybrid, Terrain)
+  useEffect(() => {
+    const L = typeof window !== 'undefined' ? (window as any).L : null;
+    const map = mapRef.current;
+    if (!L || !map) return;
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+    }
+
+    const lyrs = GOOGLE_MAP_LYRS[mapType];
+    const newGoogleLayer = L.tileLayer(
+      `https://mt{s}.google.com/vt/lyrs=${lyrs}&x={x}&y={y}&z={z}`,
+      {
+        attribution: '&copy; Google Maps',
+        subdomains: ['0', '1', '2', '3'],
+        maxZoom: 20,
+      }
+    ).addTo(map);
+
+    // Keep base tiles underneath markers and polygons
+    newGoogleLayer.bringToBack();
+    tileLayerRef.current = newGoogleLayer;
+  }, [mapType]);
 
   // Click & Coordinate Picker Listener
   useEffect(() => {
@@ -305,6 +343,55 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
     >
       <div ref={containerRef} style={{ width: '100%', height: '100%', zIndex: 1 }} />
 
+      {/* Top Left: Apple-Frosted Google Maps Mode Selector ([Map] [Satellite] [Terrain]) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '14px',
+          left: '14px',
+          zIndex: 1000,
+          display: 'flex',
+          backgroundColor: 'rgba(255, 255, 255, 0.94)',
+          backdropFilter: 'blur(12px)',
+          borderRadius: '9999px',
+          padding: '3px',
+          border: '1px solid #e0e0e0',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+          gap: '2px',
+        }}
+      >
+        {(['roadmap', 'satellite', 'terrain'] as GoogleMapType[]).map((type) => {
+          const isActive = mapType === type;
+          const labels: Record<GoogleMapType, string> = {
+            roadmap: 'Map',
+            satellite: 'Satellite',
+            terrain: 'Terrain',
+          };
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setMapType(type)}
+              style={{
+                border: 'none',
+                outline: 'none',
+                cursor: 'pointer',
+                borderRadius: '9999px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: isActive ? '600' : '400',
+                fontFamily: '-apple-system, SF Pro Text, sans-serif',
+                backgroundColor: isActive ? '#0066cc' : 'transparent',
+                color: isActive ? '#ffffff' : '#1d1d1f',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {labels[type]}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Floating Apple-Design Map Controls ({component.button-icon-circular} 44x44px) */}
       <div
         style={{
@@ -414,40 +501,75 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
         </button>
       </div>
 
-      {/* Floating Map Legend Indicator Pill */}
+      {/* Bottom Bar: Google Brand Watermark & Safety Legend Pill */}
       <div
         style={{
           position: 'absolute',
           bottom: '12px',
           left: '12px',
           zIndex: 1000,
-          backgroundColor: 'rgba(255, 255, 255, 0.92)',
-          backdropFilter: 'blur(12px)',
-          borderRadius: '9999px',
-          padding: '5px 12px',
-          border: '1px solid #e0e0e0',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          fontFamily: '-apple-system, SF Pro Text, sans-serif',
-          fontSize: '11px',
-          color: '#1d1d1f',
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)',
+          gap: '8px',
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#34c759' }} />
-          Safe
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#ff9500' }} />
-          Caution
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#ff3b30' }} />
-          Concern
-        </span>
-        <span style={{ color: '#86868b' }}>| Zoom: {currentZoom}x</span>
+        {/* Google Maps Watermark Badge */}
+        <div
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.94)',
+            backdropFilter: 'blur(8px)',
+            borderRadius: '6px',
+            padding: '3px 7px',
+            border: '1px solid rgba(0, 0, 0, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            fontSize: '12px',
+            fontWeight: '700',
+            fontFamily: 'Roboto, -apple-system, sans-serif',
+            userSelect: 'none',
+            boxShadow: '0 1px 4px rgba(0, 0, 0, 0.08)',
+            letterSpacing: '0.2px',
+          }}
+        >
+          <span style={{ color: '#4285F4' }}>G</span>
+          <span style={{ color: '#EA4335' }}>o</span>
+          <span style={{ color: '#FBBC05' }}>o</span>
+          <span style={{ color: '#4285F4' }}>g</span>
+          <span style={{ color: '#34A853' }}>l</span>
+          <span style={{ color: '#EA4335' }}>e</span>
+        </div>
+
+        {/* Floating Map Legend Indicator Pill */}
+        <div
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.94)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: '9999px',
+            padding: '5px 12px',
+            border: '1px solid #e0e0e0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontFamily: '-apple-system, SF Pro Text, sans-serif',
+            fontSize: '11px',
+            color: '#1d1d1f',
+            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#34c759' }} />
+            Safe
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#ff9500' }} />
+            Caution
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#ff3b30' }} />
+            Concern
+          </span>
+          <span style={{ color: '#86868b' }}>| Zoom: {currentZoom}x</span>
+        </div>
       </div>
     </div>
   );

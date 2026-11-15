@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -9,6 +10,24 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { IncidentReport, RiskZone, RouteOption, SafeHaven } from '../../types/safety';
 import { Colors, BorderRadius, TypographyStyles } from '../../theme';
+
+export type GoogleMapType = 'roadmap' | 'satellite' | 'terrain';
+
+const GOOGLE_MAP_LYRS: Record<GoogleMapType, string> = {
+  roadmap: 'm',
+  satellite: 'y',
+  terrain: 'p',
+};
+
+function latLngToTile(lat: number, lng: number, zoom: number) {
+  const n = Math.pow(2, zoom);
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const latRad = (lat * Math.PI) / 180;
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+  );
+  return { x, y, z: zoom };
+}
 
 export interface SafetyMapViewProps {
   height?: number;
@@ -47,9 +66,13 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
 }) => {
   const [zoomIndex, setZoomIndex] = useState<number>(0);
   const [selectedPinInfo, setSelectedPinInfo] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<GoogleMapType>('roadmap');
+  const [tilesLoaded, setTilesLoaded] = useState<boolean>(true);
 
   const zoomScale = ZOOM_STEPS[zoomIndex];
   const selectedRoute = routes.find((r) => r.id === selectedRouteId);
+  const centerTile = latLngToTile(userLocation.lat, userLocation.lng, 15);
+  const lyrs = GOOGLE_MAP_LYRS[mapType];
 
   const handleZoomIn = () => {
     setZoomIndex((prev) => Math.min(prev + 1, ZOOM_STEPS.length - 1));
@@ -87,37 +110,61 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
             },
           ]}
         >
-          {/* 1. Realistic Cartographic Canvas Background */}
-          {/* City Block / Terrain Base */}
+          {/* 1. Official Google Maps Tile Background Grid */}
+          {tilesLoaded && (
+            <View style={styles.tileGridContainer}>
+              {[-1, 0, 1].map((dy) => (
+                <View key={`row-${dy}`} style={styles.tileRow}>
+                  {[-1, 0, 1].map((dx) => {
+                    const tx = centerTile.x + dx;
+                    const ty = centerTile.y + dy;
+                    const tileUri = `https://mt1.google.com/vt/lyrs=${lyrs}&x=${tx}&y=${ty}&z=15`;
+                    return (
+                      <Image
+                        key={`${tx}-${ty}`}
+                        source={{ uri: tileUri }}
+                        style={styles.googleMapTile}
+                        resizeMode="cover"
+                        onError={() => setTilesLoaded(false)}
+                      />
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Fallback Vector Terrain (renders if offline or while tiles load) */}
           <View style={styles.terrainBase} />
+          {!tilesLoaded && (
+            <>
+              {/* Lush Green Parks & Public Spaces */}
+              <View style={styles.parkCentral} />
+              <View style={styles.parkEast} />
+              <View style={styles.parkSouth} />
 
-          {/* Lush Green Parks & Public Spaces */}
-          <View style={styles.parkCentral} />
-          <View style={styles.parkEast} />
-          <View style={styles.parkSouth} />
+              {/* Waterway / Canal Feature */}
+              <View style={styles.waterwayCanal} />
 
-          {/* Waterway / Canal Feature */}
-          <View style={styles.waterwayCanal} />
+              {/* Arterial Road Grid & Roundabouts */}
+              <View style={styles.connaughtOuter} />
+              <View style={styles.connaughtInner} />
 
-          {/* Arterial Road Grid & Roundabouts */}
-          {/* Connaught Outer Circle */}
-          <View style={styles.connaughtOuter} />
-          {/* Connaught Inner Circle */}
-          <View style={styles.connaughtInner} />
+              {/* Major Avenues */}
+              <View style={styles.avenueJanpath} />
+              <View style={styles.avenueBarakhamba} />
+              <View style={styles.avenueSansad} />
+              <View style={styles.avenueKG} />
+              <View style={styles.avenueCrossA} />
+              <View style={styles.avenueCrossB} />
 
-          {/* Major Avenues */}
-          <View style={styles.avenueJanpath} />
-          <View style={styles.avenueBarakhamba} />
-          <View style={styles.avenueSansad} />
-          <View style={styles.avenueKG} />
-          <View style={styles.avenueCrossA} />
-          <View style={styles.avenueCrossB} />
-
-          {/* Street Labels */}
-          <Text style={styles.streetLabelJanpath}>Janpath Blvd</Text>
-          <Text style={styles.streetLabelBarakhamba}>Barakhamba Rd</Text>
-          <Text style={styles.streetLabelConnaught}>Connaught Place</Text>
-          <Text style={styles.streetLabelSansad}>Sansad Marg</Text>
+              {/* Street Labels */}
+              <Text style={styles.streetLabelJanpath}>Janpath Blvd</Text>
+              <Text style={styles.streetLabelBarakhamba}>Barakhamba Rd</Text>
+              <Text style={styles.streetLabelConnaught}>Connaught Place</Text>
+              <Text style={styles.streetLabelSansad}>Sansad Marg</Text>
+            </>
+          )}
 
           {/* 2. Safety Zones Layer */}
           <View style={styles.zonesLayer}>
@@ -220,6 +267,38 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
         </View>
       </Pressable>
 
+      {/* Top Left: Apple-Frosted Google Maps Mode Selector ([Map] [Satellite] [Terrain]) */}
+      <View style={styles.mapTypeSelector}>
+        {(['roadmap', 'satellite', 'terrain'] as GoogleMapType[]).map((type) => {
+          const isActive = mapType === type;
+          const labels: Record<GoogleMapType, string> = {
+            roadmap: 'Map',
+            satellite: 'Satellite',
+            terrain: 'Terrain',
+          };
+          return (
+            <TouchableOpacity
+              key={type}
+              onPress={() => setMapType(type)}
+              style={[
+                styles.mapTypeBtn,
+                isActive && styles.mapTypeBtnActive,
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.mapTypeBtnText,
+                  isActive && styles.mapTypeBtnTextActive,
+                ]}
+              >
+                {labels[type]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {/* Floating Apple Map Zoom Controls ({component.button-icon-circular} 40x40px) */}
       <View style={styles.controlsCluster}>
         <TouchableOpacity
@@ -262,21 +341,34 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
         </View>
       )}
 
-      {/* Map Legend Pill */}
-      <View style={styles.legendPill}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#34c759' }]} />
-          <Text style={styles.legendText}>Safe</Text>
+      {/* Bottom Bar: Google Brand Watermark & Safety Legend Pill */}
+      <View style={styles.bottomCluster}>
+        {/* Google Maps Watermark Badge */}
+        <View style={styles.googleBadge}>
+          <Text style={[styles.googleLetter, { color: '#4285F4' }]}>G</Text>
+          <Text style={[styles.googleLetter, { color: '#EA4335' }]}>o</Text>
+          <Text style={[styles.googleLetter, { color: '#FBBC05' }]}>o</Text>
+          <Text style={[styles.googleLetter, { color: '#4285F4' }]}>g</Text>
+          <Text style={[styles.googleLetter, { color: '#34A853' }]}>l</Text>
+          <Text style={[styles.googleLetter, { color: '#EA4335' }]}>e</Text>
         </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#ff9500' }]} />
-          <Text style={styles.legendText}>Caution</Text>
+
+        {/* Map Legend Pill */}
+        <View style={styles.legendPill}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#34c759' }]} />
+            <Text style={styles.legendText}>Safe</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#ff9500' }]} />
+            <Text style={styles.legendText}>Caution</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#ff3b30' }]} />
+            <Text style={styles.legendText}>Concern</Text>
+          </View>
+          <Text style={styles.legendZoomText}>| Zoom: {zoomScale.toFixed(1)}x</Text>
         </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#ff3b30' }]} />
-          <Text style={styles.legendText}>Concern</Text>
-        </View>
-        <Text style={styles.legendZoomText}>| Zoom: {zoomScale.toFixed(1)}x</Text>
       </View>
     </View>
   );
@@ -303,7 +395,22 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
-  // 1. Cartographic Visual Background
+  // 1. Google Maps Tile Layer
+  tileGridContainer: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  tileRow: {
+    flexDirection: 'row',
+  },
+  googleMapTile: {
+    width: 256,
+    height: 256,
+  },
+
+  // 1b. Cartographic Visual Background (Fallback)
   terrainBase: {
     ...StyleSheet.absoluteFill,
     backgroundColor: '#f6f6f8',
@@ -639,10 +746,48 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
 
+  // Google Maps Mode Selector
+  mapTypeSelector: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    zIndex: 100,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    padding: 3,
+    gap: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  mapTypeBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: BorderRadius.pill,
+  },
+  mapTypeBtnActive: {
+    backgroundColor: Colors.primary,
+  },
+  mapTypeBtnText: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 11,
+    fontWeight: '400',
+    color: '#1d1d1f',
+  },
+  mapTypeBtnTextActive: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+
   // Info Banner
   infoBanner: {
     position: 'absolute',
-    top: 14,
+    top: 54,
     left: 14,
     right: 68,
     backgroundColor: 'rgba(29, 29, 31, 0.92)',
@@ -657,11 +802,38 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
 
-  // Legend
-  legendPill: {
+  // Bottom Cluster
+  bottomCluster: {
     position: 'absolute',
     bottom: 12,
     left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 100,
+  },
+  googleBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  googleLetter: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Legend
+  legendPill: {
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderWidth: 1,
     borderColor: '#e0e0e0',
@@ -671,7 +843,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    zIndex: 100,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,

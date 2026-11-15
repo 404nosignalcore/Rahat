@@ -5,10 +5,29 @@ import {
   StyleSheet,
   TouchableOpacity,
   Pressable,
+  Image,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, BorderRadius, TypographyStyles, Spacing } from '../../theme';
 import { LatLng, SafetyZone, SafetyReport, NearbyHelpItem } from '../../types';
+
+export type GoogleMapType = 'roadmap' | 'satellite' | 'terrain';
+
+const GOOGLE_MAP_LYRS: Record<GoogleMapType, string> = {
+  roadmap: 'm',
+  satellite: 'y',
+  terrain: 'p',
+};
+
+function latLngToTile(lat: number, lng: number, zoom: number) {
+  const n = Math.pow(2, zoom);
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const latRad = (lat * Math.PI) / 180;
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+  );
+  return { x, y, z: zoom };
+}
 
 interface SafeMapViewProps {
   currentLocation: LatLng;
@@ -39,8 +58,12 @@ export const SafeMapView: React.FC<SafeMapViewProps> = ({
 }) => {
   const [zoomIndex, setZoomIndex] = useState<number>(0);
   const [selectedItemName, setSelectedItemName] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<GoogleMapType>('roadmap');
+  const [tilesLoaded, setTilesLoaded] = useState<boolean>(true);
 
   const zoomScale = ZOOM_STEPS[zoomIndex];
+  const centerTile = latLngToTile(currentLocation.latitude, currentLocation.longitude, 15);
+  const lyrs = GOOGLE_MAP_LYRS[mapType];
 
   const handleZoomIn = () => {
     setZoomIndex((prev) => Math.min(prev + 1, ZOOM_STEPS.length - 1));
@@ -67,26 +90,48 @@ export const SafeMapView: React.FC<SafeMapViewProps> = ({
             },
           ]}
         >
-          {/* 1. Rich Cartographic Base (Streets, Parks, Waterway) */}
+          {/* 1. Official Google Maps Tile Layer */}
+          {tilesLoaded && (
+            <View style={styles.tileGridContainer}>
+              {[-1, 0, 1].map((dy) => (
+                <View key={`row-${dy}`} style={styles.tileRow}>
+                  {[-1, 0, 1].map((dx) => {
+                    const tx = centerTile.x + dx;
+                    const ty = centerTile.y + dy;
+                    const tileUri = `https://mt1.google.com/vt/lyrs=${lyrs}&x=${tx}&y=${ty}&z=15`;
+                    return (
+                      <Image
+                        key={`${tx}-${ty}`}
+                        source={{ uri: tileUri }}
+                        style={styles.googleMapTile}
+                        resizeMode="cover"
+                        onError={() => setTilesLoaded(false)}
+                      />
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Fallback Vector Terrain (renders if offline or while tiles load) */}
           <View style={styles.terrainBase} />
-          <View style={styles.parkCentral} />
-          <View style={styles.parkEast} />
-          <View style={styles.waterwayCanal} />
-
-          {/* Connaught Circular Plazas */}
-          <View style={styles.connaughtOuter} />
-          <View style={styles.connaughtInner} />
-
-          {/* Major Radial Boulevards */}
-          <View style={styles.avenueJanpath} />
-          <View style={styles.avenueBarakhamba} />
-          <View style={styles.avenueSansad} />
-          <View style={styles.avenueKG} />
-
-          {/* Street Name Typography */}
-          <Text style={styles.streetLabelJanpath}>Janpath Blvd</Text>
-          <Text style={styles.streetLabelBarakhamba}>Barakhamba Rd</Text>
-          <Text style={styles.streetLabelConnaught}>Connaught Place</Text>
+          {!tilesLoaded && (
+            <>
+              <View style={styles.parkCentral} />
+              <View style={styles.parkEast} />
+              <View style={styles.waterwayCanal} />
+              <View style={styles.connaughtOuter} />
+              <View style={styles.connaughtInner} />
+              <View style={styles.avenueJanpath} />
+              <View style={styles.avenueBarakhamba} />
+              <View style={styles.avenueSansad} />
+              <View style={styles.avenueKG} />
+              <Text style={styles.streetLabelJanpath}>Janpath Blvd</Text>
+              <Text style={styles.streetLabelBarakhamba}>Barakhamba Rd</Text>
+              <Text style={styles.streetLabelConnaught}>Connaught Place</Text>
+            </>
+          )}
 
           {/* 2. Safety Zones Layer */}
           <View style={styles.zonesLayer}>
@@ -204,6 +249,38 @@ export const SafeMapView: React.FC<SafeMapViewProps> = ({
         </View>
       </Pressable>
 
+      {/* Top Left: Apple-Frosted Google Maps Mode Selector ([Map] [Satellite] [Terrain]) */}
+      <View style={styles.mapTypeSelector}>
+        {(['roadmap', 'satellite', 'terrain'] as GoogleMapType[]).map((type) => {
+          const isActive = mapType === type;
+          const labels: Record<GoogleMapType, string> = {
+            roadmap: 'Map',
+            satellite: 'Satellite',
+            terrain: 'Terrain',
+          };
+          return (
+            <TouchableOpacity
+              key={type}
+              onPress={() => setMapType(type)}
+              style={[
+                styles.mapTypeBtn,
+                isActive && styles.mapTypeBtnActive,
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.mapTypeBtnText,
+                  isActive && styles.mapTypeBtnTextActive,
+                ]}
+              >
+                {labels[type]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {/* Floating Apple Map Zoom Controls */}
       <View style={styles.controlsCluster}>
         <TouchableOpacity
@@ -246,22 +323,34 @@ export const SafeMapView: React.FC<SafeMapViewProps> = ({
         </View>
       )}
 
-      {/* Bottom HUD: Legend & Coordinates */}
+      {/* Bottom HUD: Google Badge, Legend & Coordinates */}
       <View style={styles.mapHud}>
-        <View style={styles.legendContainer}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: Colors.green }]} />
-            <Text style={styles.legendText}>Safe</Text>
+        <View style={styles.hudLeftGroup}>
+          {/* Google Maps Watermark Badge */}
+          <View style={styles.googleBadge}>
+            <Text style={[styles.googleLetter, { color: '#4285F4' }]}>G</Text>
+            <Text style={[styles.googleLetter, { color: '#EA4335' }]}>o</Text>
+            <Text style={[styles.googleLetter, { color: '#FBBC05' }]}>o</Text>
+            <Text style={[styles.googleLetter, { color: '#4285F4' }]}>g</Text>
+            <Text style={[styles.googleLetter, { color: '#34A853' }]}>l</Text>
+            <Text style={[styles.googleLetter, { color: '#EA4335' }]}>e</Text>
           </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: Colors.yellow }]} />
-            <Text style={styles.legendText}>Caution</Text>
+
+          <View style={styles.legendContainer}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: Colors.green }]} />
+              <Text style={styles.legendText}>Safe</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: Colors.yellow }]} />
+              <Text style={styles.legendText}>Caution</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: Colors.red }]} />
+              <Text style={styles.legendText}>Concern</Text>
+            </View>
+            <Text style={styles.legendZoomText}>| Zoom: {zoomScale.toFixed(1)}x</Text>
           </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: Colors.red }]} />
-            <Text style={styles.legendText}>Concern</Text>
-          </View>
-          <Text style={styles.legendZoomText}>| Zoom: {zoomScale.toFixed(1)}x</Text>
         </View>
 
         <View style={styles.coordinatesPill}>
@@ -296,7 +385,22 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
-  // 1. Cartographic Base
+  // 1. Google Maps Tile Layer
+  tileGridContainer: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  tileRow: {
+    flexDirection: 'row',
+  },
+  googleMapTile: {
+    width: 256,
+    height: 256,
+  },
+
+  // 1b. Cartographic Base (Fallback)
   terrainBase: {
     ...StyleSheet.absoluteFill,
     backgroundColor: '#f6f6f8',
@@ -575,10 +679,48 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
 
+  // Google Maps Mode Selector
+  mapTypeSelector: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    zIndex: 100,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    padding: 3,
+    gap: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  mapTypeBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: BorderRadius.pill,
+  },
+  mapTypeBtnActive: {
+    backgroundColor: Colors.primary,
+  },
+  mapTypeBtnText: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 11,
+    fontWeight: '400',
+    color: '#1d1d1f',
+  },
+  mapTypeBtnTextActive: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+
   // Info Banner
   infoBanner: {
     position: 'absolute',
-    top: 14,
+    top: 54,
     left: 14,
     right: 68,
     backgroundColor: 'rgba(29, 29, 31, 0.92)',
@@ -602,6 +744,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  hudLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  googleBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  googleLetter: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   legendContainer: {
     flexDirection: 'row',
