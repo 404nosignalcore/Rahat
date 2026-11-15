@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics, SafeAreaView } from 'react-native-safe-area-context';
 import { RahatProvider, useRahat } from './src/context/SafeWalkContext';
 import { TopHeaderBar } from './src/components/navigation/TopHeaderBar';
 import { BottomTabBar } from './src/components/navigation/BottomTabBar';
@@ -101,7 +101,7 @@ const MainShell: React.FC = () => {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={styles.provider} initialMetrics={initialWindowMetrics}>
       <ErrorBoundary>
         <RahatProvider>
           <MainShell />
@@ -112,8 +112,14 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  provider: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+  },
   root: {
     flex: 1,
+    width: '100%',
+    height: '100%',
   },
   banner: {
     paddingHorizontal: 14,
