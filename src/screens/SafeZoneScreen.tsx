@@ -37,6 +37,9 @@ const CATEGORIES: (IncidentCategory | 'all')[] = [
 
 export const SafeZoneScreen: React.FC = () => {
   const {
+    setActiveTab,
+    beginSosCountdown,
+    activeSosAlert,
     language,
     themeMode,
     timeHour,
@@ -167,13 +170,14 @@ export const SafeZoneScreen: React.FC = () => {
   const zonePalette = riskBadgeColors(activeZone.level);
 
   return (
-    <ScrollView
-      style={[
-        styles.screen,
-        { backgroundColor: isDark ? '#000000' : Colors.canvasParchment },
-      ]}
-      contentContainerStyle={styles.scrollContent}
-    >
+    <View style={styles.screenWrapper}>
+      <ScrollView
+        style={[
+          styles.screen,
+          { backgroundColor: isDark ? '#000000' : Colors.canvasParchment },
+        ]}
+        contentContainerStyle={styles.scrollContent}
+      >
       {/* SECTION 1: Museum Hero Tile (Light Full-Bleed Tile - {component.product-tile-light}) */}
       <View
         style={[
@@ -215,8 +219,30 @@ export const SafeZoneScreen: React.FC = () => {
               : 'Live streetlighting indices, community reports, and verified safe havens framed with absolute clarity.'}
           </Text>
 
-          {/* Dual Pill CTAs ({component.button-primary} & {component.button-secondary-pill}) */}
+          {/* Action Pills with Emergency SOS Button */}
           <View style={styles.ctaRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Activate Emergency SOS"
+              onPress={() => {
+                setActiveTab('sos');
+                beginSosCountdown();
+              }}
+              style={({ pressed }) => [
+                styles.sosHeroBtn,
+                pressed && styles.pressed,
+              ]}
+            >
+              <AppIcon name="sos" size={16} color="#ffffff" />
+              <Text style={styles.sosHeroBtnText}>
+                {activeSosAlert
+                  ? 'SOS ACTIVE'
+                  : language === 'hi'
+                  ? 'आपातकालीन SOS'
+                  : 'EMERGENCY SOS'}
+              </Text>
+            </Pressable>
+
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Report Incident"
@@ -738,18 +764,89 @@ export const SafeZoneScreen: React.FC = () => {
         </View>
       </View>
     </ScrollView>
+
+    {/* Floating Emergency SOS Fast-Action Button */}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Emergency SOS Fast Action"
+      onPress={() => {
+        setActiveTab('sos');
+        beginSosCountdown();
+      }}
+      style={({ pressed }) => [
+        styles.floatingSosBtn,
+        pressed && styles.pressed,
+        activeSosAlert && styles.floatingSosActive,
+      ]}
+    >
+      <View style={styles.floatingSosInner}>
+        <AppIcon name="sos" size={18} color="#ffffff" />
+        <Text style={styles.floatingSosText}>
+          {activeSosAlert ? 'SOS ACTIVE' : 'SOS'}
+        </Text>
+      </View>
+    </Pressable>
+  </View>
   );
 };
 
 const styles = StyleSheet.create({
+  screenWrapper: {
+    flex: 1,
+    position: 'relative',
+  },
   screen: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 80,
   },
   pressed: {
     transform: [{ scale: 0.95 }], // Exact DESIGN.md micro-interaction
+  },
+  sosHeroBtn: {
+    backgroundColor: Colors.red,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    borderRadius: BorderRadius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  sosHeroBtnText: {
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
+  floatingSosBtn: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    backgroundColor: Colors.red,
+    borderRadius: BorderRadius.pill,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    zIndex: 999,
+    ...Shadows.product,
+  },
+  floatingSosActive: {
+    backgroundColor: '#b91c1c',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  floatingSosInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  floatingSosText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.5,
   },
 
   // SECTION 1: Museum Hero Tile ({component.product-tile-light})
