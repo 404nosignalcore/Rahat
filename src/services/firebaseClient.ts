@@ -1,12 +1,15 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth,
+  initializeAuth,
+  inMemoryPersistence,
   GoogleAuthProvider,
   signInWithPopup,
   signOut as firebaseSignOut,
   deleteUser,
   onAuthStateChanged,
   User,
+  Auth,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -24,6 +27,8 @@ import {
   limit,
   serverTimestamp,
 } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import firebaseConfig from '../../firebase-applet-config.json';
 import {
   CommunityComment,
@@ -37,9 +42,46 @@ import {
 } from '../types/safety';
 import { FIELD_LIMITS, sanitizeText } from '../utils/validation';
 
-const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth(app);
+let appInstance: any = null;
+try {
+  appInstance = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+} catch (e) {
+  console.warn('[Rahat] Firebase initializeApp:', e);
+}
+
+let dbInstance: any = null;
+try {
+  if (appInstance) {
+    dbInstance = getFirestore(appInstance, firebaseConfig.firestoreDatabaseId);
+  }
+} catch (e) {
+  console.warn('[Rahat] Firestore initialization:', e);
+}
+export const db = dbInstance;
+
+let authInstance: any = null;
+try {
+  if (appInstance) {
+    if (Platform.OS === 'web') {
+      authInstance = getAuth(appInstance);
+    } else {
+      try {
+        authInstance = initializeAuth(appInstance, {
+          persistence: inMemoryPersistence,
+        });
+      } catch {
+        authInstance = getAuth(appInstance);
+      }
+    }
+  }
+} catch (e) {
+  console.warn('[Rahat] Firebase Auth initialization safe fallback:', e);
+  authInstance = {
+    currentUser: null,
+    onAuthStateChanged: () => () => {},
+  } as unknown as Auth;
+}
+export const auth: Auth = authInstance;
 
 export enum OperationType {
   CREATE = 'create',
@@ -98,6 +140,7 @@ export function handleFirestoreError(
  */
 export async function testFirestoreConnection(): Promise<'online' | 'offline'> {
   try {
+    if (!db) return 'offline';
     await getDocFromServer(doc(db, 'test', 'connection'));
     return 'online';
   } catch (error) {
@@ -109,11 +152,20 @@ export async function testFirestoreConnection(): Promise<'online' | 'offline'> {
   }
 }
 
-export function subscribeToAuth(callback: (user: User | null) => void) {
-  return onAuthStateChanged(auth, callback);
+export function subscribeToAuth(callback: (user: User | null) => void): () => void {
+  try {
+    if (auth && typeof onAuthStateChanged === 'function') {
+      return onAuthStateChanged(auth, callback);
+    }
+  } catch (e) {
+    console.warn('[Rahat] subscribeToAuth fallback:', e);
+  }
+  callback(null);
+  return () => {};
 }
 
 export async function signInWithGooglePopup(): Promise<User> {
+  if (!auth) throw new Error('Firebase Auth is not available.');
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   const cred = await signInWithPopup(auth, provider);
@@ -122,7 +174,9 @@ export async function signInWithGooglePopup(): Promise<User> {
 }
 
 export async function signOutFirebase(): Promise<void> {
-  await firebaseSignOut(auth);
+  if (auth && typeof firebaseSignOut === 'function') {
+    await firebaseSignOut(auth);
+  }
 }
 
 export async function ensureUserDocuments(user: User, preferredLanguage: 'en' | 'hi' = 'en') {
