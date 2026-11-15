@@ -21,6 +21,10 @@ import {
   Spacing,
 } from '../theme';
 import { Badge } from '../components/common/Badge';
+import { CommunitySosCard } from '../components/sos/CommunitySosCard';
+import { VictimLiveRescueView } from '../components/sos/VictimLiveRescueView';
+import { ResponderAlertModal } from '../components/sos/ResponderAlertModal';
+import { ResponderDashboardModal } from '../components/sos/ResponderDashboardModal';
 
 export const SosScreen: React.FC = () => {
   const {
@@ -36,6 +40,20 @@ export const SosScreen: React.FC = () => {
     cancelSosCountdown,
     triggerSosImmediately,
     resolveSosAlert,
+    activeCommunitySos,
+    incomingRescueAlert,
+    activeResponderSession,
+    triggerCommunitySos,
+    cancelCommunitySos,
+    resolveCommunitySosRequest,
+    reportCommunityResponder,
+    simulateIncomingRescueAlert,
+    acceptRescueRequest,
+    declineRescueRequest,
+    startResponderTravel,
+    markResponderArrived,
+    cancelResponderHelp,
+    dismissResponderSession,
   } = useSafeWalk();
 
   const isDark = themeMode === 'dark';
@@ -183,6 +201,33 @@ export const SosScreen: React.FC = () => {
       {/* SECTION 2: Centerpiece SOS Surface */}
       <View style={styles.centerSection}>
         <View style={styles.centerInner}>
+          {/* If Community SOS is active, display the Live Rescue View prominently */}
+          {activeCommunitySos &&
+          !activeCommunitySos.isCancelled &&
+          activeCommunitySos.status !== 'resolved' ? (
+            <View style={{ marginBottom: 24 }}>
+              <VictimLiveRescueView
+                request={activeCommunitySos}
+                onCancelRequest={cancelCommunitySos}
+                onResolveRequest={resolveCommunitySosRequest}
+                onReportResponder={reportCommunityResponder}
+                themeMode={themeMode}
+              />
+            </View>
+          ) : (
+            /* Otherwise, show the prominent "GET HELP FROM NEARBY PEOPLE" Community SOS Card */
+            <View style={{ marginBottom: 24 }}>
+              <CommunitySosCard
+                onTriggerCommunitySos={(cat, desc) => {
+                  triggerCommunitySos(cat, desc);
+                }}
+                onSimulateIncomingAlert={simulateIncomingRescueAlert}
+                currentCoordinates={{ lat: currentLocation.lat, lng: currentLocation.lng }}
+                themeMode={themeMode}
+              />
+            </View>
+          )}
+
           <View
             style={[
               styles.sosTriggerCard,
@@ -538,6 +583,27 @@ export const SosScreen: React.FC = () => {
           </View>
         </View>
       </View>
+
+      {/* Community Responders Modals */}
+      <ResponderAlertModal
+        visible={!!incomingRescueAlert}
+        request={incomingRescueAlert?.request || null}
+        responder={incomingRescueAlert?.responder || null}
+        onAccept={acceptRescueRequest}
+        onDecline={declineRescueRequest}
+        themeMode={themeMode}
+      />
+
+      <ResponderDashboardModal
+        visible={!!activeResponderSession}
+        request={activeResponderSession?.request || null}
+        responder={activeResponderSession?.responder || null}
+        onStartTravel={startResponderTravel}
+        onArrived={markResponderArrived}
+        onCancelResponse={cancelResponderHelp}
+        onClose={dismissResponderSession}
+        themeMode={themeMode}
+      />
     </ScrollView>
   );
 };

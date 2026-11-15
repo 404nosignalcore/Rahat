@@ -286,3 +286,76 @@ export interface DataReliabilitySector {
   warningNotice?: string;
   warningNoticeHi?: string;
 }
+
+/**
+ * Community Emergency Response Network Types (SafeWalk/Raksha Rescue Network)
+ */
+export type CommunitySosStatus =
+  | 'idle'
+  | 'broadcasting'
+  | 'responders_assigned'
+  | 'arrived'
+  | 'resolved'
+  | 'cancelled';
+
+export type CommunityResponderStatus =
+  | 'notified'
+  | 'accepted'
+  | 'on_the_way'
+  | 'arrived'
+  | 'cancelled';
+
+export interface CommunityResponder {
+  id: string;
+  name: string;
+  phone: string;
+  avatarColor: string;
+  isVerified: boolean;
+  verificationBadge: string;
+  rating: number;
+  acceptedHelpsCount: number;
+  distanceMeters: number;
+  latitude: number;
+  longitude: number;
+  status: CommunityResponderStatus;
+  acceptedAt?: string;
+  startedAt?: string;
+  arrivedAt?: string;
+  cancelledAt?: string;
+  etaMinutes?: number;
+}
+
+export interface CommunitySosEventLog {
+  id: string;
+  timestamp: string;
+  type:
+    | 'broadcast_started'
+    | 'wave_expanded'
+    | 'responder_accepted'
+    | 'responder_en_route'
+    | 'responder_arrived'
+    | 'responder_cancelled'
+    | 'cancelled_by_victim'
+    | 'resolved'
+    | 'suspicious_behavior_reported';
+  message: string;
+  responderName?: string;
+}
+
+export interface CommunitySosRequest {
+  id: string;
+  victimUid: string;
+  victimName: string;
+  victimPhone: string;
+  victimLocation: { lat: number; lng: number };
+  emergencyCategory: 'personal_safety' | 'stalking_threat' | 'medical_distress' | 'harassment' | 'general_emergency';
+  emergencyDescription: string;
+  currentWave: 1 | 2 | 3;
+  waveRadiusMeters: number;
+  status: CommunitySosStatus;
+  createdAt: string;
+  responders: CommunityResponder[];
+  auditLog: CommunitySosEventLog[];
+  isCancelled: boolean;
+  cancelReason?: string;
+}

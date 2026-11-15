@@ -3,6 +3,8 @@ import {
   AppLanguage,
   AppTab,
   CommunityPost,
+  CommunityResponder,
+  CommunitySosRequest,
   ConnectSubTab,
   ConsentSettings,
   EmergencyContact,
@@ -42,6 +44,18 @@ import { canSubmitWithSpamCooldown } from '../utils/validation';
 import { locationService } from '../services/locationAdapter';
 import { routeService } from '../services/routeService';
 import { alertService, buildMapShareUrl } from '../services/alertService';
+import {
+  acceptCommunitySosResponse,
+  cancelCommunitySosByVictim,
+  cancelResponderAssistance,
+  createCommunitySosRequest,
+  expandProximityWave,
+  getAvailableCommunityCandidates,
+  reportSuspiciousResponder,
+  resolveCommunitySos,
+  setResponderArrived,
+  setResponderOnTheWay,
+} from '../services/communitySosService';
 import {
   addSafetyReportCommentDoc,
   createCommunityPostDoc,
@@ -140,6 +154,25 @@ interface SafeWalkContextValue {
   triggerSosImmediately: () => Promise<void>;
   resolveSosAlert: () => Promise<void>;
 
+  // Community SOS Rescue Network (Atomic 3-Responder System)
+  activeCommunitySos: CommunitySosRequest | null;
+  incomingRescueAlert: { request: CommunitySosRequest; responder: CommunityResponder } | null;
+  activeResponderSession: { request: CommunitySosRequest; responder: CommunityResponder } | null;
+  triggerCommunitySos: (
+    category?: CommunitySosRequest['emergencyCategory'],
+    description?: string
+  ) => Promise<void>;
+  cancelCommunitySos: (reason?: string) => Promise<void>;
+  resolveCommunitySosRequest: () => Promise<void>;
+  reportCommunityResponder: (responderId: string, concernDetails: string) => Promise<void>;
+  simulateIncomingRescueAlert: () => void;
+  acceptRescueRequest: () => void;
+  declineRescueRequest: () => void;
+  startResponderTravel: () => void;
+  markResponderArrived: () => void;
+  cancelResponderHelp: (reason?: string) => void;
+  dismissResponderSession: () => void;
+
   // Connect (SafeCircle, Nearby Help, Community)
   safeCircles: SafeCircleGroup[];
   toggleCircleSharing: (circleId: string) => void;
@@ -228,6 +261,29 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [contacts, setContacts] = useState<EmergencyContact[]>(INITIAL_EMERGENCY_CONTACTS);
   const [sosCountdownRemaining, setSosCountdownRemaining] = useState<number | null>(null);
   const [activeSosAlert, setActiveSosAlert] = useState<SosAlertRecord | null>(null);
+
+  // Community SOS State
+  const [activeCommunitySos, setActiveCommunitySos] = useState<CommunitySosRequest | null>(null);
+  const [incomingRescueAlert, setIncomingRescueAlert] = useState<{
+    request: CommunitySosRequest;
+    responder: CommunityResponder;
+  } | null>(null);
+  const [activeResponderSession, setActiveResponderSession] = useState<{
+    request: CommunitySosRequest;
+    responder: CommunityResponder;
+  } | null>(null);
+  const communityTimeoutsRef = useRef<any[]>([]);
+
+  const clearCommunityTimeouts = () => {
+    communityTimeoutsRef.current.forEach((t) => clearTimeout(t));
+    communityTimeoutsRef.current = [];
+  };
+
+  useEffect(() => {
+    return () => {
+      clearCommunityTimeouts();
+    };
+  }, []);
 
   const [safeCircles, setSafeCircles] = useState<SafeCircleGroup[]>(INITIAL_SAFE_CIRCLES);
   const [safeHavens] = useState<SafeHaven[]>(INITIAL_SAFE_HAVENS);
@@ -774,6 +830,231 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setStatusBanner('Emergency alert marked resolved.');
   };
 
+  // --- Community SOS Rescue Network Handlers ---
+  const triggerCommunitySos: SafeWalkContextValue['triggerCommunitySos'] = async (
+    category = 'personal_safety',
+    description = 'Need immediate physical presence and support from nearby people.'
+  ) => {
+    clearCommunityTimeouts();
+
+    const victimName = user.displayName || 'SafeWalk Member';
+    const victimPhone = user.phone || '+91 98765 43210';
+    const victimUid = user.uid || 'usr-local';
+
+    const currentReq = createCommunitySosRequest(
+      { uid: victimUid, name: victimName, phone: victimPhone },
+      { lat: currentLocation.lat, lng: currentLocation.lng },
+      category,
+      description
+    );
+
+    setActiveCommunitySos(currentReq);
+    setStatusBanner(`Community SOS broadcast active (ID: ${currentReq.id}). Alerting nearby members...`);
+
+    const candidates = getAvailableCommunityCandidates(currentLocation.lat, currentLocation.lng);
+
+    // Wave 1: First responder (e.g. Priya Sharma) accepts at ~2.5s
+    const t1 = setTimeout(() => {
+      setActiveCommunitySos((prev) => {
+        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+        const res = acceptCommunitySosResponse(prev, candidates[0]);
+        return res.ok ? res.request : prev;
+      });
+    }, 2500);
+    communityTimeoutsRef.current.push(t1);
+
+    // Wave 1: Second responder (e.g. Vikram Singh) accepts at ~5.0s
+    const t2 = setTimeout(() => {
+      setActiveCommunitySos((prev) => {
+        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+        const res = acceptCommunitySosResponse(prev, candidates[1]);
+        return res.ok ? res.request : prev;
+      });
+    }, 5000);
+    communityTimeoutsRef.current.push(t2);
+
+    // Wave expansion at ~7s (Wave 2: 1000m)
+    const tWave = setTimeout(() => {
+      setActiveCommunitySos((prev) => {
+        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+        return expandProximityWave(prev);
+      });
+    }, 7000);
+    communityTimeoutsRef.current.push(tWave);
+
+    // Wave 2: Third responder (e.g. Dr. Ananya Sen) accepts at ~8.5s -> strictly caps at 3 responders
+    const t3 = setTimeout(() => {
+      setActiveCommunitySos((prev) => {
+        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+        const res = acceptCommunitySosResponse(prev, candidates[2]);
+        return res.ok ? res.request : prev;
+      });
+    }, 8500);
+    communityTimeoutsRef.current.push(t3);
+
+    // First responder starts travel at ~12s
+    const t4 = setTimeout(() => {
+      setActiveCommunitySos((prev) => {
+        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+        return setResponderOnTheWay(prev, candidates[0].id);
+      });
+    }, 12000);
+    communityTimeoutsRef.current.push(t4);
+
+    // Second responder starts travel at ~15s
+    const t5 = setTimeout(() => {
+      setActiveCommunitySos((prev) => {
+        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+        return setResponderOnTheWay(prev, candidates[1].id);
+      });
+    }, 15000);
+    communityTimeoutsRef.current.push(t5);
+
+    // First responder arrives at ~22s
+    const t6 = setTimeout(() => {
+      setActiveCommunitySos((prev) => {
+        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+        return setResponderArrived(prev, candidates[0].id);
+      });
+    }, 22000);
+    communityTimeoutsRef.current.push(t6);
+  };
+
+  const cancelCommunitySos = async (reason = "I'm safe now.") => {
+    clearCommunityTimeouts();
+    setActiveCommunitySos((prev) => {
+      if (!prev) return null;
+      return cancelCommunitySosByVictim(prev, reason);
+    });
+    setStatusBanner('Community SOS cancelled. Responders stood down.');
+  };
+
+  const resolveCommunitySosRequest = async () => {
+    clearCommunityTimeouts();
+    setActiveCommunitySos((prev) => {
+      if (!prev) return null;
+      return resolveCommunitySos(prev);
+    });
+    setStatusBanner('Community emergency marked safely resolved.');
+  };
+
+  const reportCommunityResponder = async (responderId: string, concernDetails: string) => {
+    setActiveCommunitySos((prev) => {
+      if (!prev) return null;
+      const updated = reportSuspiciousResponder(prev, responderId, concernDetails);
+
+      // Rule: If one responder cancels, notify the next eligible nearby user to maintain 3 if possible
+      const activeResponders = updated.responders.filter((r) => r.status !== 'cancelled');
+      if (activeResponders.length < 3) {
+        const candidates = getAvailableCommunityCandidates(currentLocation.lat, currentLocation.lng);
+        const nextCandidate = candidates.find((c) => !updated.responders.some((r) => r.id === c.id));
+        if (nextCandidate) {
+          const timeout = setTimeout(() => {
+            setActiveCommunitySos((curr) => {
+              if (!curr || curr.isCancelled || curr.status === 'cancelled') return curr;
+              const res = acceptCommunitySosResponse(curr, nextCandidate);
+              return res.ok ? res.request : curr;
+            });
+          }, 3000);
+          communityTimeoutsRef.current.push(timeout);
+        }
+      }
+      return updated;
+    });
+    setStatusBanner('Security concern logged. Responder disengaged.');
+  };
+
+  const simulateIncomingRescueAlert = () => {
+    const mockRequest = createCommunitySosRequest(
+      { uid: 'usr-victim-ananya', name: 'Ananya Roy', phone: '+91 98765 43210' },
+      { lat: currentLocation.lat + 0.0032, lng: currentLocation.lng - 0.0025 },
+      'personal_safety',
+      'Followed by an unknown individual along dark alley near Metro Exit 2. Need physical presence.'
+    );
+
+    const responderProfile: CommunityResponder = {
+      id: user.uid || 'usr-current-hero',
+      name: user.displayName || 'You',
+      phone: user.phone || '+91 99999 00000',
+      avatarColor: '#0066cc',
+      isVerified: true,
+      verificationBadge: 'Verified SafeWalk Community Hero',
+      rating: 4.95,
+      acceptedHelpsCount: 8,
+      distanceMeters: 450,
+      latitude: currentLocation.lat,
+      longitude: currentLocation.lng,
+      status: 'notified',
+      etaMinutes: 4,
+    };
+
+    setIncomingRescueAlert({
+      request: mockRequest,
+      responder: responderProfile,
+    });
+  };
+
+  const acceptRescueRequest = () => {
+    if (!incomingRescueAlert) return;
+    const { request, responder } = incomingRescueAlert;
+    const res = acceptCommunitySosResponse(request, responder);
+    setIncomingRescueAlert(null);
+    if (res.ok) {
+      const activeResp = res.request.responders.find((r) => r.id === responder.id) || responder;
+      setActiveResponderSession({
+        request: res.request,
+        responder: activeResp,
+      });
+      setStatusBanner('Emergency response accepted. Navigation route unlocked.');
+    }
+  };
+
+  const declineRescueRequest = () => {
+    setIncomingRescueAlert(null);
+    setStatusBanner('Rescue alert declined.');
+  };
+
+  const startResponderTravel = () => {
+    if (!activeResponderSession) return;
+    const { request, responder } = activeResponderSession;
+    const updatedReq = setResponderOnTheWay(request, responder.id);
+    const updatedResp = updatedReq.responders.find((r) => r.id === responder.id) || {
+      ...responder,
+      status: 'on_the_way' as const,
+    };
+    setActiveResponderSession({
+      request: updatedReq,
+      responder: updatedResp,
+    });
+  };
+
+  const markResponderArrived = () => {
+    if (!activeResponderSession) return;
+    const { request, responder } = activeResponderSession;
+    const updatedReq = setResponderArrived(request, responder.id);
+    const updatedResp = updatedReq.responders.find((r) => r.id === responder.id) || {
+      ...responder,
+      status: 'arrived' as const,
+    };
+    setActiveResponderSession({
+      request: updatedReq,
+      responder: updatedResp,
+    });
+    setStatusBanner('Arrival logged. Please verify identity calmly.');
+  };
+
+  const cancelResponderHelp = (reason = 'Responder had to disengage.') => {
+    if (!activeResponderSession) return;
+    const { request, responder } = activeResponderSession;
+    cancelResponderAssistance(request, responder.id, reason);
+    setActiveResponderSession(null);
+    setStatusBanner('You disengaged from response. Next community member alerted.');
+  };
+
+  const dismissResponderSession = () => {
+    setActiveResponderSession(null);
+  };
+
   const toggleCircleSharing = (circleId: string) => {
     setSafeCircles((prev) =>
       prev.map((c) => (c.id === circleId ? { ...c, sharingEnabled: !c.sharingEnabled } : c))
@@ -983,6 +1264,20 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         cancelSosCountdown,
         triggerSosImmediately,
         resolveSosAlert,
+        activeCommunitySos,
+        incomingRescueAlert,
+        activeResponderSession,
+        triggerCommunitySos,
+        cancelCommunitySos,
+        resolveCommunitySosRequest,
+        reportCommunityResponder,
+        simulateIncomingRescueAlert,
+        acceptRescueRequest,
+        declineRescueRequest,
+        startResponderTravel,
+        markResponderArrived,
+        cancelResponderHelp,
+        dismissResponderSession,
         safeCircles,
         toggleCircleSharing,
         inviteCircleMember,
