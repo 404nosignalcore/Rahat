@@ -12,6 +12,7 @@ export interface SafetyMapViewProps {
   userLocation?: { lat: number; lng: number };
   onSelectZone?: (zone: RiskZone) => void;
   onSelectReport?: (report: IncidentReport) => void;
+  onSelectRoute?: (route: RouteOption) => void;
   onPickCoordinate?: (lat: number, lng: number) => void;
   pickMode?: boolean;
 }
@@ -41,6 +42,7 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
     userLocation = { lat: 28.6295, lng: 77.224 },
     onSelectZone,
     onSelectReport,
+    onSelectRoute,
     onPickCoordinate,
     pickMode = false,
   } = props;
@@ -230,7 +232,7 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
 
       const line = L.polyline(route.path, {
         color: lineColor,
-        weight: isSelected ? 6 : 3,
+        weight: isSelected ? 6 : 3.5,
         opacity: isSelected ? 0.95 : 0.45,
         dashArray: route.isRecommended ? undefined : '6, 8',
       });
@@ -238,10 +240,27 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
       line.bindTooltip(
         `<div style="font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 600;">
           ${route.name} (${route.durationMins} min) · ${route.safetyScore}/100 Safe
+          ${isSelected ? '<br/><span style="color: #0066cc; font-size: 11px;">Active Comparison Target</span>' : ''}
         </div>`
       );
+
+      line.on('click', () => {
+        onSelectRoute?.(route);
+      });
+
       line.addTo(group);
     });
+
+    // Auto-fit selected route bounds if available
+    const activeRoute = routes.find((r) => r.id === selectedRouteId);
+    if (activeRoute && activeRoute.path.length > 1) {
+      try {
+        const bounds = L.latLngBounds(activeRoute.path);
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+      } catch (err) {
+        // bounds fallback
+      }
+    }
 
     // 3. Incident Reports
     reports.forEach((rep) => {

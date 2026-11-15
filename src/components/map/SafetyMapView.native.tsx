@@ -39,6 +39,7 @@ export interface SafetyMapViewProps {
   userLocation?: { lat: number; lng: number };
   onSelectZone?: (zone: RiskZone) => void;
   onSelectReport?: (report: IncidentReport) => void;
+  onSelectRoute?: (route: RouteOption) => void;
   onPickCoordinate?: (lat: number, lng: number) => void;
   pickMode?: boolean;
 }
@@ -61,6 +62,7 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
   userLocation = { lat: 28.6295, lng: 77.224 },
   onSelectZone,
   onSelectReport,
+  onSelectRoute,
   onPickCoordinate,
   pickMode = false,
 }) => {

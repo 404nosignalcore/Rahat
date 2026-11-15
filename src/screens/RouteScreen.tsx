@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +22,7 @@ import {
 } from '../theme';
 import { SearchInput } from '../components/common/SearchInput';
 import { Badge } from '../components/common/Badge';
+import { CompareRoutesModal } from '../components/modals/CompareRoutesModal';
 
 export const RouteScreen: React.FC = () => {
   const {
@@ -53,9 +55,17 @@ export const RouteScreen: React.FC = () => {
 
   const [originInput, setOriginInput] = useState(selectedRoute.originLabel);
   const [destInput, setDestInput] = useState(selectedRoute.destinationLabel);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
 
   const handleFindRoutes = async () => {
-    await searchRoutes(originInput, destInput);
+    setIsSearching(true);
+    try {
+      await searchRoutes(originInput, destInput);
+      setIsCompareModalOpen(true);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const primaryCircleId = safeCircles[0]?.id || 'circle-family';
@@ -221,13 +231,21 @@ export const RouteScreen: React.FC = () => {
                   accessibilityRole="button"
                   accessibilityLabel="Compare safer routes"
                   onPress={handleFindRoutes}
+                  disabled={isSearching}
                   style={({ pressed }) => [
                     styles.compareBtn,
+                    isSearching && styles.compareBtnSearching,
                     pressed && styles.pressed,
                   ]}
                 >
-                  <AppIcon name="search" size={16} color="#ffffff" />
-                  <Text style={styles.compareBtnText}>Compare Routes</Text>
+                  {isSearching ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <AppIcon name="search" size={16} color="#ffffff" />
+                  )}
+                  <Text style={styles.compareBtnText}>
+                    {isSearching ? 'Comparing...' : 'Compare Routes'}
+                  </Text>
                 </Pressable>
               </View>
             </View>
@@ -247,6 +265,7 @@ export const RouteScreen: React.FC = () => {
                     safeHavens={safeHavens}
                     routes={routes}
                     selectedRouteId={selectedRoute.id}
+                    onSelectRoute={setSelectedRoute}
                     userLocation={{ lat: currentLocation.lat, lng: currentLocation.lng }}
                   />
                 </View>
@@ -389,14 +408,29 @@ export const RouteScreen: React.FC = () => {
 
               {/* Route Comparison Column */}
               <View style={[styles.routesCol, isWide && styles.routesColWide]}>
-                <Text
-                  style={[
-                    styles.sectionHeading,
-                    { color: isDark ? '#ffffff' : Colors.ink },
-                  ]}
-                >
-                  Engineered Route Options ({routes.length})
-                </Text>
+                <View style={styles.sectionHeaderRow}>
+                  <Text
+                    style={[
+                      styles.sectionHeading,
+                      { color: isDark ? '#ffffff' : Colors.ink },
+                    ]}
+                  >
+                    Engineered Route Options ({routes.length})
+                  </Text>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Open route comparison matrix"
+                    onPress={() => setIsCompareModalOpen(true)}
+                    style={({ pressed }) => [
+                      styles.compareModalPill,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <AppIcon name="route" size={13} color={Colors.primary} />
+                    <Text style={styles.compareModalPillText}>Compare Matrix</Text>
+                  </Pressable>
+                </View>
 
                 {routes.map((route) => {
                   const isSelected = route.id === selectedRoute.id;
@@ -446,6 +480,42 @@ export const RouteScreen: React.FC = () => {
                         />
                       </View>
 
+                      {/* Metric Comparison Gauges */}
+                      <View style={styles.cardMetersRow}>
+                        <View style={styles.cardMeterItem}>
+                          <Text style={[styles.cardMeterLabel, { color: isDark ? Colors.bodyMuted : Colors.inkMuted80 }]}>
+                            Lighting: {route.lightingPercentage}%
+                          </Text>
+                          <View style={styles.cardMeterTrack}>
+                            <View
+                              style={[
+                                styles.cardMeterFill,
+                                {
+                                  width: `${route.lightingPercentage}%`,
+                                  backgroundColor: route.lightingPercentage >= 80 ? Colors.green : Colors.yellow,
+                                },
+                              ]}
+                            />
+                          </View>
+                        </View>
+                        <View style={styles.cardMeterItem}>
+                          <Text style={[styles.cardMeterLabel, { color: isDark ? Colors.bodyMuted : Colors.inkMuted80 }]}>
+                            CCTV: {route.cctvCoveragePercentage}%
+                          </Text>
+                          <View style={styles.cardMeterTrack}>
+                            <View
+                              style={[
+                                styles.cardMeterFill,
+                                {
+                                  width: `${route.cctvCoveragePercentage}%`,
+                                  backgroundColor: route.cctvCoveragePercentage >= 70 ? Colors.green : Colors.yellow,
+                                },
+                              ]}
+                            />
+                          </View>
+                        </View>
+                      </View>
+
                       <Text
                         style={[
                           styles.routeRationale,
@@ -463,6 +533,35 @@ export const RouteScreen: React.FC = () => {
                           </Text>
                         </View>
                       )}
+
+                      {/* Card Action Row */}
+                      <View style={styles.cardActionRow}>
+                        {isSelected ? (
+                          <View style={styles.selectedIndicatorPill}>
+                            <AppIcon name="check" size={11} color="#ffffff" />
+                            <Text style={styles.selectedIndicatorText}>Active Map Route</Text>
+                          </View>
+                        ) : (
+                          <Text style={[styles.tapToSelectText, { color: Colors.primary }]}>
+                            Tap to display on map →
+                          </Text>
+                        )}
+
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Compare specifications for ${route.name}`}
+                          onPress={() => {
+                            setSelectedRoute(route);
+                            setIsCompareModalOpen(true);
+                          }}
+                          style={({ pressed }) => [
+                            styles.cardCompareBtn,
+                            pressed && styles.pressed,
+                          ]}
+                        >
+                          <Text style={styles.cardCompareBtnText}>Compare Specs</Text>
+                        </Pressable>
+                      </View>
                     </Pressable>
                   );
                 })}
@@ -532,6 +631,18 @@ export const RouteScreen: React.FC = () => {
           </View>
         </View>
       )}
+
+      {/* Interactive Safer Route Comparison Matrix Sheet */}
+      <CompareRoutesModal
+        visible={isCompareModalOpen}
+        onClose={() => setIsCompareModalOpen(false)}
+        routes={routes}
+        selectedRouteId={selectedRoute.id}
+        onSelectRoute={setSelectedRoute}
+        onStartJourney={startJourney}
+        language={language}
+        themeMode={themeMode}
+      />
     </View>
   );
 };
@@ -646,6 +757,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  compareBtnSearching: {
+    opacity: 0.8,
   },
   compareBtnText: {
     fontFamily: TypographyStyles.body.fontFamily,
@@ -795,17 +909,107 @@ const styles = StyleSheet.create({
   },
 
   // Route Comparison Cards
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   sectionHeading: {
     fontFamily: TypographyStyles.tagline.fontFamily,
     fontSize: 21,
     fontWeight: '600',
     letterSpacing: 0.231,
-    marginBottom: 4,
+  },
+  compareModalPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 102, 204, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 102, 204, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.pill,
+    gap: 6,
+  },
+  compareModalPillText: {
+    fontFamily: TypographyStyles.bodyStrong.fontFamily,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   routeCard: {
     borderRadius: BorderRadius.lg, // 18px
     padding: 20,
     gap: 8,
+  },
+  cardMetersRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  cardMeterItem: {
+    flex: 1,
+  },
+  cardMeterLabel: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 11,
+    marginBottom: 3,
+  },
+  cardMeterTrack: {
+    height: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  cardMeterFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  cardActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.06)',
+  },
+  selectedIndicatorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.pill,
+    gap: 4,
+  },
+  selectedIndicatorText: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  tapToSelectText: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  cardCompareBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  cardCompareBtnText: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   routeCardTop: {
     flexDirection: 'row',
