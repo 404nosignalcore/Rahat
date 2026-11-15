@@ -13,7 +13,5 @@ export const SafeAreaShell: React.FC<{ children: React.ReactNode }> = ({ childre
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    height: '100%' as unknown as number,
-    overflow: 'hidden',
   },
 });

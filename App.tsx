@@ -1,7 +1,7 @@
 import React from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaShell } from './src/components/ui/SafeAreaShell';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { RahatProvider, useRahat } from './src/context/SafeWalkContext';
 import { TopHeaderBar } from './src/components/navigation/TopHeaderBar';
 import { BottomTabBar } from './src/components/navigation/BottomTabBar';
@@ -13,11 +13,51 @@ import { SosScreen } from './src/screens/SosScreen';
 import { ConnectScreen } from './src/screens/ConnectScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: any) {
+    console.error('Rahat App Error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaView style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorMessage}>{this.state.error?.message}</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => this.setState({ hasError: false, error: null })}
+            style={styles.retryButton}
+          >
+            <Text style={styles.retryButtonText}>Reload App</Text>
+          </Pressable>
+        </SafeAreaView>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const MainShell: React.FC = () => {
   const { activeTab, theme, themeMode, statusBanner, clearStatusBanner } = useRahat();
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.bg }]}>
+    <SafeAreaView
+      style={[styles.root, { backgroundColor: theme.colors.bg }]}
+      edges={['top', 'left', 'right']}
+    >
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <TopHeaderBar />
 
@@ -61,19 +101,19 @@ const MainShell: React.FC = () => {
 
 export default function App() {
   return (
-    <SafeAreaShell>
-      <RahatProvider>
-        <MainShell />
-      </RahatProvider>
-    </SafeAreaShell>
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <RahatProvider>
+          <MainShell />
+        </RahatProvider>
+      </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    height: '100%' as unknown as number,
-    overflow: 'hidden',
   },
   banner: {
     paddingHorizontal: 14,
@@ -95,6 +135,35 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    minHeight: 0,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: '#F4F6FA',
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#DC2626',
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 13,
+    color: '#334155',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#6D5BD0',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });
