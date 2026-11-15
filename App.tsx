@@ -12,6 +12,7 @@ import { RouteScreen } from './src/screens/RouteScreen';
 import { SosScreen } from './src/screens/SosScreen';
 import { ConnectScreen } from './src/screens/ConnectScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { Colors, TypographyStyles, BorderRadius } from './src/theme';
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -52,32 +53,45 @@ class ErrorBoundary extends React.Component<
 
 const MainShell: React.FC = () => {
   const { activeTab, theme, themeMode, statusBanner, clearStatusBanner } = useRahat();
+  const isDark = themeMode === 'dark';
 
   return (
     <SafeAreaView
-      style={[styles.root, { backgroundColor: theme.colors.bg }]}
+      style={[
+        styles.root,
+        { backgroundColor: isDark ? '#000000' : Colors.canvasParchment },
+      ]}
       edges={['top', 'left', 'right']}
     >
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <TopHeaderBar />
 
       {statusBanner && (
         <View
           style={[
             styles.banner,
-            { backgroundColor: theme.colors.navyPrimary, borderBottomColor: theme.colors.border },
+            {
+              backgroundColor: isDark ? '#1c1c1e' : Colors.canvas,
+              borderBottomColor: isDark ? '#272729' : Colors.hairline,
+            },
           ]}
         >
-          <Text style={[styles.bannerText, { color: theme.colors.navyText }]}>
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.bannerText,
+              { color: isDark ? '#ffffff' : Colors.ink },
+            ]}
+          >
             {statusBanner}
           </Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Dismiss notification banner"
             onPress={clearStatusBanner}
-            style={styles.bannerClose}
+            style={({ pressed }) => [styles.bannerClose, pressed && { opacity: 0.6 }]}
           >
-            <Text style={{ color: theme.colors.navyText, fontWeight: '700', fontSize: 12 }}>
+            <Text style={styles.bannerCloseText}>
               Dismiss
             </Text>
           </Pressable>
@@ -114,7 +128,7 @@ export default function App() {
 const styles = StyleSheet.create({
   provider: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#000000',
   },
   root: {
     flex: 1,
@@ -122,22 +136,31 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   banner: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 12,
     borderBottomWidth: 1,
   },
   bannerText: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: -0.224,
   },
   bannerClose: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: '#e8f2ff',
+  },
+  bannerCloseText: {
+    color: Colors.primary, // Action Blue #0066cc
+    fontSize: 12,
+    fontWeight: '600',
   },
   content: {
     flex: 1,
@@ -147,29 +170,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#F4F6FA',
+    backgroundColor: '#f5f5f7',
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#DC2626',
+    fontFamily: TypographyStyles.tagline.fontFamily,
+    fontSize: 21,
+    fontWeight: '600',
+    color: '#ff3b30',
     marginBottom: 8,
   },
   errorMessage: {
-    fontSize: 13,
-    color: '#334155',
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 14,
+    color: '#333333',
     textAlign: 'center',
     marginBottom: 20,
   },
   retryButton: {
-    backgroundColor: '#6D5BD0',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 22,
+    paddingVertical: 11,
+    borderRadius: BorderRadius.pill,
   },
   retryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 15,
   },
 });

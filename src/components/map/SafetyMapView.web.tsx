@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { IncidentReport, RiskZone, RouteOption, SafeHaven } from '../../types/safety';
 import { SafetyMapView as SafetyMapViewNative } from './SafetyMapView.native';
 
@@ -17,58 +17,128 @@ export interface SafetyMapViewProps {
 }
 
 const RISK_HEX = {
-  safe: { stroke: '#15803D', fill: '#22C55E' },
-  caution: { stroke: '#B45309', fill: '#F59E0B' },
-  danger: { stroke: '#DC2626', fill: '#EF4444' },
+  safe: { stroke: '#34c759', fill: '#34c759' },
+  caution: { stroke: '#ff9500', fill: '#ff9500' },
+  danger: { stroke: '#ff3b30', fill: '#ff3b30' },
 };
 
 export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
   const {
-    height = 280,
+    height = 360,
     zones = [],
     reports = [],
     safeHavens = [],
     routes = [],
     selectedRouteId,
-    userLocation,
+    userLocation = { lat: 28.6295, lng: 77.224 },
     onSelectZone,
     onSelectReport,
     onPickCoordinate,
     pickMode = false,
   } = props;
 
-  const L = typeof window !== 'undefined' ? (window as any).L : null;
+  const [leafletReady, setLeafletReady] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && Boolean((window as any).L);
+  });
+  const [currentZoom, setCurrentZoom] = useState<number>(15);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const layerGroupRef = useRef<any>(null);
 
+  // Dynamic injection of Leaflet CSS & JS if not present
   useEffect(() => {
-    if (!L || !containerRef.current || mapRef.current) return;
+    if (typeof window === 'undefined') return;
+
+    if ((window as any).L) {
+      setLeafletReady(true);
+      return;
+    }
+
+    // Inject Leaflet CSS
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+
+    // Inject Leaflet JS
+    let script = document.getElementById('leaflet-js') as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.id = 'leaflet-js';
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.async = true;
+      script.onload = () => {
+        setLeafletReady(true);
+      };
+      script.onerror = () => {
+        console.warn('Leaflet script CDN unavailable; using enhanced vector preview.');
+      };
+      document.body.appendChild(script);
+    } else {
+      const handleLoad = () => setLeafletReady(true);
+      script.addEventListener('load', handleLoad);
+      return () => {
+        script?.removeEventListener('load', handleLoad);
+      };
+    }
+  }, []);
+
+  // Map Initialization
+  useEffect(() => {
+    const L = typeof window !== 'undefined' ? (window as any).L : null;
+    if (!L || !leafletReady || !containerRef.current || mapRef.current) return;
+
+    const initialCenter = userLocation
+      ? [userLocation.lat, userLocation.lng]
+      : [28.6295, 77.224];
 
     const map = L.map(containerRef.current, {
-      center: [28.6295, 77.224],
+      center: initialCenter,
       zoom: 15,
-      zoomControl: true,
+      minZoom: 11,
+      maxZoom: 19,
+      zoomControl: false, // Custom Apple pill zoom controls
+      scrollWheelZoom: true,
+      doubleClickZoom: true,
+      touchZoom: true,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(map);
+    // CartoDB Voyager tiles: crisp, modern, Apple Maps-like aesthetic
+    L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      {
+        attribution: '&copy; OpenStreetMap contributors, &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19,
+      }
+    ).addTo(map);
 
     const group = L.layerGroup().addTo(map);
     mapRef.current = map;
     layerGroupRef.current = group;
 
+    map.on('zoomend', () => {
+      setCurrentZoom(map.getZoom());
+    });
+
+    const timer = window.setTimeout(() => {
+      map.invalidateSize();
+    }, 120);
+
     return () => {
+      window.clearTimeout(timer);
       map.remove();
       mapRef.current = null;
       layerGroupRef.current = null;
     };
-  }, [L]);
+  }, [leafletReady]);
 
+  // Click & Coordinate Picker Listener
   useEffect(() => {
-    if (!L) return;
     const map = mapRef.current;
     if (!map) return;
 
@@ -81,92 +151,142 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
     return () => {
       map.off('click', handleClick);
     };
-  }, [L, pickMode, onPickCoordinate]);
+  }, [pickMode, onPickCoordinate]);
 
+  // Layer Update (Zones, Routes, Reports, Havens, Beacon)
   useEffect(() => {
-    if (!L) return;
+    const L = typeof window !== 'undefined' ? (window as any).L : null;
     const group = layerGroupRef.current;
     const map = mapRef.current;
-    if (!group || !map) return;
+    if (!L || !group || !map) return;
 
     group.clearLayers();
 
+    // 1. Safety Zones (Corridors & Areas)
     zones.forEach((zone) => {
-      const palette = RISK_HEX[zone.level];
+      const palette = RISK_HEX[zone.level] || RISK_HEX.safe;
       const poly = L.polygon(zone.coordinates, {
         color: palette.stroke,
         fillColor: palette.fill,
         fillOpacity: 0.22,
         weight: 2,
+        dashArray: zone.level === 'danger' ? '4, 6' : undefined,
       });
-      poly.bindTooltip(`${zone.name} · Score ${zone.safetyScore}/100`);
+
+      poly.bindTooltip(
+        `<div style="font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 600; padding: 2px 4px;">
+          ${zone.name}<br/>
+          <span style="font-weight: 400; color: #555;">Safety Score: ${zone.safetyScore}/100 · ${zone.level.toUpperCase()}</span>
+        </div>`,
+        { sticky: true }
+      );
+
       poly.on('click', () => onSelectZone?.(zone));
       poly.addTo(group);
     });
 
+    // 2. Monitored Routes
     routes.forEach((route) => {
       const isSelected = route.id === selectedRouteId;
+      const lineColor = route.isRecommended ? '#34c759' : '#0066cc';
+
       const line = L.polyline(route.path, {
-        color: route.isRecommended ? '#15803D' : '#B45309',
+        color: lineColor,
         weight: isSelected ? 6 : 3,
         opacity: isSelected ? 0.95 : 0.45,
         dashArray: route.isRecommended ? undefined : '6, 8',
       });
-      line.bindTooltip(`${route.name} (${route.durationMins} min)`);
+
+      line.bindTooltip(
+        `<div style="font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 600;">
+          ${route.name} (${route.durationMins} min) · ${route.safetyScore}/100 Safe
+        </div>`
+      );
       line.addTo(group);
     });
 
+    // 3. Incident Reports
     reports.forEach((rep) => {
       const marker = L.circleMarker([rep.latitude, rep.longitude], {
         radius: 8,
         color: '#FFFFFF',
-        weight: 2,
-        fillColor: rep.severity >= 4 ? '#DC2626' : '#F59E0B',
-        fillOpacity: 0.92,
+        weight: 2.5,
+        fillColor: rep.severity >= 4 ? '#ff3b30' : '#ff9500',
+        fillOpacity: 0.95,
       });
-      marker.bindTooltip(`${rep.title} (${rep.verificationStatus})`);
+
+      marker.bindTooltip(
+        `<div style="font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 600;">
+          ${rep.title}<br/>
+          <span style="font-weight: 400; color: #666;">${rep.address} · ${rep.verificationStatus}</span>
+        </div>`
+      );
       marker.on('click', () => onSelectReport?.(rep));
       marker.addTo(group);
     });
 
+    // 4. Safe Havens Sanctuary Points
     safeHavens.forEach((haven) => {
       const marker = L.circleMarker([haven.latitude, haven.longitude], {
-        radius: 7,
+        radius: 7.5,
         color: '#FFFFFF',
-        weight: 2,
-        fillColor: '#6D5BD0',
+        weight: 2.5,
+        fillColor: '#0066cc', // Action Blue
         fillOpacity: 0.95,
       });
+
       marker.bindTooltip(
-        `${haven.name} (${haven.sourceTier === 'verified' ? 'Verified' : 'Community'})`
+        `<div style="font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 600;">
+          🏥 ${haven.name}<br/>
+          <span style="font-weight: 400; color: #444;">${haven.address}</span>
+        </div>`
       );
       marker.addTo(group);
     });
 
+    // 5. User Location Beacon with Pulsing Halo
     if (userLocation) {
+      // Accuracy pulse ring
+      L.circleMarker([userLocation.lat, userLocation.lng], {
+        radius: 20,
+        color: 'transparent',
+        fillColor: '#0066cc',
+        fillOpacity: 0.16,
+      }).addTo(group);
+
+      // Core Beacon
       L.circleMarker([userLocation.lat, userLocation.lng], {
         radius: 9,
         color: '#FFFFFF',
         weight: 3,
-        fillColor: '#2563EB',
+        fillColor: '#0066cc',
         fillOpacity: 1,
       })
-        .bindTooltip('Your Current Location')
+        .bindTooltip('<strong style="font-family: -apple-system, sans-serif;">Your Current Location</strong>')
         .addTo(group);
     }
+  }, [zones, reports, safeHavens, routes, selectedRouteId, userLocation, onSelectZone, onSelectReport]);
 
-    const timer = window.setTimeout(() => {
-      if (mapRef.current === map && containerRef.current?.isConnected) {
-        map.invalidateSize();
-      }
-    }, 80);
+  const handleZoomIn = () => {
+    if (mapRef.current) {
+      mapRef.current.zoomIn();
+    }
+  };
 
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [L, zones, reports, safeHavens, routes, selectedRouteId, userLocation]);
+  const handleZoomOut = () => {
+    if (mapRef.current) {
+      mapRef.current.zoomOut();
+    }
+  };
 
-  if (!L) {
+  const handleRecenter = () => {
+    if (mapRef.current && userLocation) {
+      mapRef.current.setView([userLocation.lat, userLocation.lng], 15, { animate: true });
+    }
+  };
+
+  // If Leaflet is not yet ready, show enhanced vector map
+  if (!leafletReady) {
     return <SafetyMapViewNative {...props} />;
   }
 
@@ -176,13 +296,159 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
       style={{
         width: '100%',
         height: `${height}px`,
-        borderRadius: '14px',
+        borderRadius: '18px', // rounded.lg from DESIGN.md
         overflow: 'hidden',
-        border: '1px solid rgba(100, 116, 139, 0.22)',
+        border: '1px solid #e0e0e0', // hairline from DESIGN.md
         position: 'relative',
+        backgroundColor: '#f5f5f7',
       }}
     >
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div ref={containerRef} style={{ width: '100%', height: '100%', zIndex: 1 }} />
+
+      {/* Floating Apple-Design Map Controls ({component.button-icon-circular} 44x44px) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '14px',
+          right: '14px',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+        }}
+      >
+        {/* Zoom In Button */}
+        <button
+          type="button"
+          aria-label="Zoom in on map"
+          onClick={handleZoomIn}
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '9999px',
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid #e0e0e0',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '20px',
+            fontWeight: '600',
+            color: '#1d1d1f',
+            transition: 'transform 0.15s ease',
+          }}
+          onMouseDown={(e) => {
+            (e.currentTarget as HTMLElement).style.transform = 'scale(0.92)';
+          }}
+          onMouseUp={(e) => {
+            (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+          }}
+        >
+          +
+        </button>
+
+        {/* Zoom Out Button */}
+        <button
+          type="button"
+          aria-label="Zoom out on map"
+          onClick={handleZoomOut}
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '9999px',
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid #e0e0e0',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '22px',
+            fontWeight: '600',
+            color: '#1d1d1f',
+            transition: 'transform 0.15s ease',
+          }}
+          onMouseDown={(e) => {
+            (e.currentTarget as HTMLElement).style.transform = 'scale(0.92)';
+          }}
+          onMouseUp={(e) => {
+            (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+          }}
+        >
+          −
+        </button>
+
+        {/* Recenter Button */}
+        <button
+          type="button"
+          aria-label="Center map on current location"
+          onClick={handleRecenter}
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '9999px',
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid #e0e0e0',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: '#0066cc',
+            transition: 'transform 0.15s ease',
+          }}
+          onMouseDown={(e) => {
+            (e.currentTarget as HTMLElement).style.transform = 'scale(0.92)';
+          }}
+          onMouseUp={(e) => {
+            (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0066cc" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="3 11 22 2 13 21 11 13 3 11" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Floating Map Legend Indicator Pill */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '12px',
+          left: '12px',
+          zIndex: 1000,
+          backgroundColor: 'rgba(255, 255, 255, 0.92)',
+          backdropFilter: 'blur(12px)',
+          borderRadius: '9999px',
+          padding: '5px 12px',
+          border: '1px solid #e0e0e0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontFamily: '-apple-system, SF Pro Text, sans-serif',
+          fontSize: '11px',
+          color: '#1d1d1f',
+          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#34c759' }} />
+          Safe
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#ff9500' }} />
+          Caution
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '4px', backgroundColor: '#ff3b30' }} />
+          Concern
+        </span>
+        <span style={{ color: '#86868b' }}>| Zoom: {currentZoom}x</span>
+      </div>
     </div>
   );
 };

@@ -7,7 +7,7 @@ import {
   Pressable,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../theme';
+import { Colors, Spacing, TypographyStyles, BorderRadius } from '../../theme';
 import { Button } from '../common/Button';
 
 interface DeviationAlertModalProps {
@@ -31,7 +31,7 @@ export const DeviationAlertModal: React.FC<DeviationAlertModalProps> = ({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onSafe}
     >
       <View style={styles.overlay}>
@@ -41,59 +41,49 @@ export const DeviationAlertModal: React.FC<DeviationAlertModalProps> = ({
           {/* Header Indicator */}
           <View style={styles.badgeRow}>
             <View style={styles.cautionBadge}>
-              <MaterialCommunityIcons name="map-marker-alert" size={18} color={Colors.yellowText} />
-              <Text style={styles.cautionBadgeText}>ROUTE DEVIATION DETECTED</Text>
+              <MaterialCommunityIcons name="map-marker-alert" size={16} color={Colors.yellowText} />
+              <Text style={styles.cautionBadgeText}>ROUTE DEVIATION</Text>
             </View>
             <Text style={styles.distanceText}>~{deviationDistanceMeters}m off path</Text>
           </View>
 
-          {/* Core Prompt Requirement */}
+          {/* Core Prompt */}
           <Text style={styles.questionTitle}>
-            Your location appears to be different from your planned route. Are you okay?
+            Route deviation detected. Are you okay?
           </Text>
 
           <Text style={styles.explanationText}>
-            SafeWalk noticed you took an unexpected turn or detour away from your safe route. Please select an option below:
+            SafeWalk noticed you took an unexpected turn away from your planned corridor. Please choose how you want to proceed:
           </Text>
 
-          {/* Four Required Actions */}
+          {/* Actions List */}
           <View style={styles.actionsList}>
-            {/* 1. I'm Safe */}
             <Button
-              title="I'm Safe"
-              variant="outline"
-              size="md"
-              icon={<MaterialCommunityIcons name="check-circle-outline" size={20} color={Colors.green} />}
+              title="I'm Safe (Dismiss)"
               onPress={onSafe}
-              style={styles.safeButton}
-              textStyle={styles.safeButtonText}
+              variant="pearl"
+              style={styles.actionBtn}
             />
 
-            {/* 2. Recalculate Route */}
             <Button
               title="Recalculate Route"
-              variant="secondary"
-              size="md"
-              icon={<MaterialCommunityIcons name="routes" size={20} color="#FFF" />}
               onPress={onRecalculate}
+              variant="primary"
+              style={styles.actionBtn}
             />
 
-            {/* 3. Share My Location */}
             <Button
-              title="Share My Location With Circle"
-              variant="outline"
-              size="md"
-              icon={<MaterialCommunityIcons name="account-group-outline" size={20} color={Colors.primary} />}
+              title="Share Location with SafeCircle"
               onPress={onShareLocation}
+              variant="secondary"
+              style={styles.actionBtn}
             />
 
-            {/* 4. Activate SOS */}
             <Button
-              title="Activate SOS Alert"
-              variant="danger"
-              size="md"
-              icon={<MaterialCommunityIcons name="alert-octagon" size={20} color="#FFF" />}
+              title="Activate SOS Emergency"
               onPress={onActivateSOS}
+              variant="danger"
+              style={styles.actionBtn}
             />
           </View>
         </View>
@@ -105,70 +95,71 @@ export const DeviationAlertModal: React.FC<DeviationAlertModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(11, 19, 43, 0.75)',
-    justifyContent: 'flex-end',
-    padding: Spacing.md,
+    backgroundColor: 'rgba(0, 0, 0, 0.52)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
   },
   contentCard: {
-    backgroundColor: Colors.card,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    ...Shadows.prominent,
-    marginBottom: Spacing.md,
+    backgroundColor: Colors.canvas,
+    borderRadius: BorderRadius.xl, // 24px (Apple Sheet)
+    padding: 24,
+    width: '100%',
+    maxWidth: 480,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
   },
   badgeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.md,
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
   cautionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.yellowLight,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: 12,
     paddingVertical: 5,
-    borderRadius: BorderRadius.full,
+    borderRadius: BorderRadius.pill,
     borderWidth: 1,
     borderColor: Colors.yellowBorder,
     gap: 6,
   },
   cautionBadgeText: {
-    fontSize: Typography.fontSize.caption,
-    fontWeight: '800',
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 11,
+    fontWeight: '700',
     color: Colors.yellowText,
+    letterSpacing: 0.5,
   },
   distanceText: {
-    fontSize: Typography.fontSize.footnote,
-    fontWeight: '700',
-    color: Colors.textSecondary,
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 12,
+    color: Colors.inkMuted48,
   },
   questionTitle: {
-    fontSize: Typography.fontSize.title3,
-    fontWeight: '800',
-    color: Colors.text,
-    lineHeight: Typography.lineHeight.title3,
-    marginBottom: Spacing.sm,
+    fontFamily: TypographyStyles.tagline.fontFamily,
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.ink,
+    letterSpacing: 0.231,
+    marginBottom: 8,
   },
   explanationText: {
-    fontSize: Typography.fontSize.body,
-    color: Colors.textSecondary,
-    lineHeight: Typography.lineHeight.body,
-    marginBottom: Spacing.lg,
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.inkMuted80,
+    marginBottom: 20,
   },
   actionsList: {
-    gap: Spacing.sm,
+    gap: 10,
   },
-  safeButton: {
-    borderColor: Colors.greenBorder,
-    backgroundColor: Colors.greenLight,
-  },
-  safeButtonText: {
-    color: Colors.greenText,
-    fontWeight: '700',
+  actionBtn: {
+    width: '100%',
   },
 });
-

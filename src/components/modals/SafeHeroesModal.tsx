@@ -2,33 +2,50 @@ import React from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeWalk } from '../../context/SafeWalkContext';
 import { AppIcon } from '../ui/AppIcon';
+import { Colors, BorderRadius, TypographyStyles } from '../../theme';
+import { Badge } from '../common/Badge';
 
 export const SafeHeroesModal: React.FC = () => {
-  const { isSafeHeroesOpen, setIsSafeHeroesOpen, safeHeroes, theme } = useSafeWalk();
+  const { isSafeHeroesOpen, setIsSafeHeroesOpen, safeHeroes, themeMode } = useSafeWalk();
+  const isDark = themeMode === 'dark';
 
   return (
     <Modal
       visible={isSafeHeroesOpen}
       transparent
-      animationType="none"
+      animationType="fade"
       onRequestClose={() => setIsSafeHeroesOpen(false)}
     >
-      <View style={[styles.backdrop, { backgroundColor: theme.colors.overlayBg }]}>
+      <View style={styles.backdrop}>
         <View
           style={[
             styles.sheet,
-            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            {
+              backgroundColor: isDark ? '#1c1c1e' : Colors.canvas,
+              borderColor: isDark ? '#272729' : Colors.hairline,
+            },
           ]}
         >
-          <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
+          {/* Header */}
+          <View
+            style={[
+              styles.header,
+              { borderBottomColor: isDark ? '#272729' : Colors.hairline },
+            ]}
+          >
             <View style={styles.titleRow}>
-              <AppIcon name="heroes" size={22} color={theme.colors.accentViolet} />
+              <AppIcon name="heroes" size={20} color={Colors.primary} />
               <View>
-                <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-                  SafeHeroes — People Who Protect
+                <Text
+                  style={[
+                    styles.title,
+                    { color: isDark ? '#ffffff' : Colors.ink },
+                  ]}
+                >
+                  SafeHeroes Verified Directory
                 </Text>
-                <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-                  Verified public helplines & statutory support resources
+                <Text style={styles.subtitle}>
+                  Verified public helplines & statutory support organizations
                 </Text>
               </View>
             </View>
@@ -36,9 +53,17 @@ export const SafeHeroesModal: React.FC = () => {
               accessibilityRole="button"
               accessibilityLabel="Close SafeHeroes directory"
               onPress={() => setIsSafeHeroesOpen(false)}
-              style={[styles.closeBtn, { backgroundColor: theme.colors.surfaceAlt }]}
+              style={({ pressed }) => [
+                styles.closeBtn,
+                { backgroundColor: isDark ? '#272729' : Colors.canvasParchment },
+                pressed && styles.pressed,
+              ]}
             >
-              <AppIcon name="close" size={18} color={theme.colors.textPrimary} />
+              <AppIcon
+                name="close"
+                size={16}
+                color={isDark ? '#ffffff' : Colors.ink}
+              />
             </Pressable>
           </View>
 
@@ -46,10 +71,13 @@ export const SafeHeroesModal: React.FC = () => {
             <View
               style={[
                 styles.disclosureBox,
-                { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                {
+                  backgroundColor: isDark ? '#272729' : Colors.canvasParchment,
+                  borderColor: isDark ? '#38383a' : Colors.hairline,
+                },
               ]}
             >
-              <Text style={[styles.disclosureText, { color: theme.colors.textSecondary }]}>
+              <Text style={styles.disclosureText}>
                 Rahat complements official emergency services and never replaces police or
                 emergency responders. Only verified statutory & public helplines are shown below.
               </Text>
@@ -60,55 +88,75 @@ export const SafeHeroesModal: React.FC = () => {
                 key={org.id}
                 style={[
                   styles.orgCard,
-                  { backgroundColor: theme.colors.bg, borderColor: theme.colors.border },
+                  {
+                    backgroundColor: isDark ? '#272729' : Colors.canvasParchment,
+                    borderColor: isDark ? '#38383a' : Colors.hairline,
+                  },
                 ]}
               >
                 <View style={styles.orgHeader}>
-                  <Text style={[styles.orgName, { color: theme.colors.textPrimary }]}>
+                  <Text
+                    style={[
+                      styles.orgName,
+                      { color: isDark ? '#ffffff' : Colors.ink },
+                    ]}
+                  >
                     {org.name}
                   </Text>
-                  <Text style={[styles.verifiedMeta, { color: theme.colors.safeGreen }]}>
-                    {org.verificationStatus === 'verified_public_helpline'
-                      ? 'Verified Public Helpline'
-                      : 'Directory Listing'}
-                  </Text>
+                  <Badge
+                    label={
+                      org.verificationStatus === 'verified_public_helpline'
+                        ? 'Verified Helpline'
+                        : 'Directory Listing'
+                    }
+                    type="safe"
+                  />
                 </View>
 
-                <Text style={[styles.orgDetail, { color: theme.colors.textSecondary }]}>
+                <Text style={styles.orgDetail}>
                   {org.assistanceType} · {org.serviceLocation}
                 </Text>
-                <Text style={[styles.orgNotes, { color: theme.colors.textMuted }]}>
-                  {org.notes}
-                </Text>
+                <Text style={styles.orgNotes}>{org.notes}</Text>
 
                 <View style={styles.actionRow}>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Call ${org.name} at ${org.contactPhone}`}
                     onPress={() => Linking.openURL(`tel:${org.contactPhone}`)}
-                    style={[styles.callBtn, { backgroundColor: theme.colors.navyPrimary }]}
+                    style={({ pressed }) => [
+                      styles.callBtn,
+                      pressed && styles.pressed,
+                    ]}
                   >
-                    <AppIcon name="phone" size={15} color={theme.colors.navyText} />
-                    <Text style={[styles.btnText, { color: theme.colors.navyText }]}>
-                      Call {org.contactPhone}
-                    </Text>
+                    <AppIcon name="phone" size={14} color="#ffffff" />
+                    <Text style={styles.callBtnText}>Call {org.contactPhone}</Text>
                   </Pressable>
 
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Visit official website for ${org.name}`}
                     onPress={() => Linking.openURL(org.officialWebsite)}
-                    style={[
+                    style={({ pressed }) => [
                       styles.webBtn,
                       {
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.border,
+                        backgroundColor: isDark ? '#1c1c1e' : Colors.canvas,
+                        borderColor: isDark ? '#38383a' : Colors.hairline,
                       },
+                      pressed && styles.pressed,
                     ]}
                   >
-                    <AppIcon name="external" size={15} color={theme.colors.textPrimary} />
-                    <Text style={[styles.btnText, { color: theme.colors.textPrimary }]}>
-                      Official Website
+                    <AppIcon
+                      name="external"
+                      size={14}
+                      color={isDark ? '#ffffff' : Colors.ink}
+                    />
+                    <Text
+                      style={[
+                        styles.webBtnText,
+                        { color: isDark ? '#ffffff' : Colors.ink },
+                      ]}
+                    >
+                      Official Site
                     </Text>
                   </Pressable>
                 </View>
@@ -124,8 +172,7 @@ export const SafeHeroesModal: React.FC = () => {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    width: '100%',
-    height: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.52)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -135,12 +182,15 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     height: '84%',
     maxHeight: 740,
-    borderRadius: 18,
+    borderRadius: BorderRadius.xl, // 24px (Apple Sheet)
     borderWidth: 1,
     overflow: 'hidden',
   },
+  pressed: {
+    transform: [{ scale: 0.95 }],
+  },
   header: {
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -154,17 +204,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontFamily: TypographyStyles.tagline.fontFamily,
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 0.231,
   },
   subtitle: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
     fontSize: 12,
+    color: Colors.inkMuted48,
     marginTop: 2,
   },
   closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -172,68 +226,81 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    gap: 12,
+    padding: 20,
+    gap: 14,
   },
   disclosureBox: {
-    padding: 12,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
   },
   disclosureText: {
-    fontSize: 12,
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
     lineHeight: 18,
+    color: Colors.inkMuted80,
   },
   orgCard: {
-    padding: 14,
-    borderRadius: 14,
+    padding: 18,
+    borderRadius: BorderRadius.lg, // 18px
     borderWidth: 1,
     gap: 8,
   },
   orgHeader: {
-    gap: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   orgName: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  verifiedMeta: {
-    fontSize: 12,
+    fontFamily: TypographyStyles.bodyStrong.fontFamily,
+    fontSize: 16,
     fontWeight: '600',
+    flex: 1,
   },
   orgDetail: {
+    fontFamily: TypographyStyles.caption.fontFamily,
     fontSize: 13,
-    fontWeight: '500',
+    color: Colors.inkMuted48,
   },
   orgNotes: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.inkMuted80,
   },
   actionRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
+    gap: 10,
+    marginTop: 6,
   },
   callBtn: {
-    minHeight: 40,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    backgroundColor: Colors.primary, // Action Blue #0066cc
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadius.pill,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
+  callBtnText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
   webBtn: {
-    minHeight: 40,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadius.pill,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  btnText: {
+  webBtnText: {
+    fontFamily: TypographyStyles.caption.fontFamily,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
   },
 });

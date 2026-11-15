@@ -2,14 +2,14 @@ import React from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Platform,
+  Pressable,
 } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../../theme';
+import { Colors, Spacing, TypographyStyles, BorderRadius } from '../../theme';
 import { useSOS } from '../../context/SOSContext';
 
 export const CustomBottomTabBar: React.FC<BottomTabBarProps> = ({
@@ -57,25 +57,21 @@ export const CustomBottomTabBar: React.FC<BottomTabBarProps> = ({
               ? options.title
               : route.name;
 
-          // The Center Prominent SOS Button
           if (isSOSTab) {
             return (
               <View key={route.key} style={styles.sosTabSlot}>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    // Open SOS emergency confirmation workflow directly
-                    openSOSConfirmation();
-                  }}
+                <Pressable
+                  onPress={openSOSConfirmation}
                   accessibilityRole="button"
                   accessibilityLabel="SOS Emergency Assistance"
-                  style={styles.sosButton}
+                  style={({ pressed }) => [
+                    styles.sosButton,
+                    pressed && styles.pressed,
+                  ]}
                 >
-                  <View style={styles.sosButtonInner}>
-                    <MaterialCommunityIcons name="alert-octagon" size={28} color="#FFFFFF" />
-                    <Text style={styles.sosButtonText}>SOS</Text>
-                  </View>
-                </TouchableOpacity>
+                  <MaterialCommunityIcons name="alert-octagon" size={16} color="#ffffff" />
+                  <Text style={styles.sosButtonText}>SOS</Text>
+                </Pressable>
               </View>
             );
           }
@@ -93,33 +89,35 @@ export const CustomBottomTabBar: React.FC<BottomTabBarProps> = ({
           };
 
           return (
-            <TouchableOpacity
+            <Pressable
               key={route.key}
               accessibilityRole="button"
               accessibilityState={isFocused ? { selected: true } : {}}
               accessibilityLabel={options.tabBarAccessibilityLabel}
               onPress={onPress}
-              style={styles.tabButton}
-              activeOpacity={0.7}
+              style={({ pressed }) => [
+                styles.tabButton,
+                pressed && styles.pressed,
+              ]}
             >
+              {isFocused && <View style={styles.activeIndicator} />}
               <MaterialCommunityIcons
                 name={getTabIcon(route.name, isFocused) as any}
-                size={24}
-                color={isFocused ? Colors.primary : Colors.textMuted}
+                size={22}
+                color={isFocused ? Colors.primary : Colors.inkMuted48}
               />
               <Text
                 style={[
                   styles.tabLabel,
                   {
-                    color: isFocused ? Colors.primary : Colors.textMuted,
-                    fontWeight: isFocused ? '700' : '500',
+                    color: isFocused ? Colors.primary : Colors.inkMuted48,
+                    fontWeight: isFocused ? '600' : '400',
                   },
                 ]}
               >
                 {label}
               </Text>
-              {isFocused && <View style={styles.activeIndicator} />}
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -129,18 +127,20 @@ export const CustomBottomTabBar: React.FC<BottomTabBarProps> = ({
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.canvas,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    ...Shadows.soft,
+    borderTopColor: Colors.hairline,
   },
   tabBarContainer: {
     flexDirection: 'row',
-    height: Spacing.tabBarHeight,
+    height: 64, // Exact DESIGN.md spec: 64px
     alignItems: 'center',
     justifyContent: 'space-around',
     position: 'relative',
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: 12,
+  },
+  pressed: {
+    transform: [{ scale: 0.95 }],
   },
   tabButton: {
     flex: 1,
@@ -148,48 +148,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: '100%',
     paddingVertical: 6,
+    gap: 3,
   },
   tabLabel: {
-    fontSize: Typography.fontSize.caption,
-    marginTop: 3,
+    fontFamily: TypographyStyles.navLink.fontFamily,
+    fontSize: 11,
+    letterSpacing: -0.12,
   },
   activeIndicator: {
-    position: 'absolute',
-    bottom: 2,
     width: 14,
-    height: 3,
-    borderRadius: 2,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: Colors.primary,
+    marginBottom: 2,
   },
   sosTabSlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
+    paddingHorizontal: 6,
   },
   sosButton: {
-    position: 'absolute',
-    top: -24,
-    width: Spacing.sosButtonSize,
-    height: Spacing.sosButtonSize,
-    borderRadius: Spacing.sosButtonSize / 2,
-    backgroundColor: Colors.card,
-    padding: 3,
-    ...Shadows.prominent,
-  },
-  sosButtonInner: {
-    flex: 1,
-    borderRadius: (Spacing.sosButtonSize - 6) / 2,
     backgroundColor: Colors.red,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadius.pill,
   },
   sosButtonText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '900',
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
     letterSpacing: 0.5,
-    marginTop: -2,
   },
 });
-

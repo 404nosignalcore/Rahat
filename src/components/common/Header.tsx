@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Colors, Spacing, Typography, BorderRadius } from '../../theme';
+import { Colors, Spacing, TypographyStyles, BorderRadius } from '../../theme';
 
 interface HeaderProps {
   title: string;
@@ -26,16 +26,15 @@ export const Header: React.FC<HeaderProps> = ({
       <View style={styles.actionContainer}>
         {rightAction}
         {onOpenHeroes ? (
-          <TouchableOpacity
-            style={styles.heroButton}
+          <Pressable
+            style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
             onPress={onOpenHeroes}
-            activeOpacity={0.8}
             accessibilityLabel="SafeHeroes Directory"
             accessibilityRole="button"
           >
-            <MaterialCommunityIcons name="shield-star" size={18} color={Colors.accent} />
+            <MaterialCommunityIcons name="shield-star" size={16} color="#ffffff" />
             <Text style={styles.heroButtonText}>SafeHeroes</Text>
-          </TouchableOpacity>
+          </Pressable>
         ) : null}
       </View>
     </View>
@@ -47,45 +46,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    backgroundColor: Colors.background,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: Colors.canvas,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.hairline,
   },
   textContainer: {
     flex: 1,
   },
   title: {
-    fontSize: Typography.fontSize.title2,
-    fontWeight: '700',
-    color: Colors.text,
-    letterSpacing: -0.3,
+    fontFamily: TypographyStyles.tagline.fontFamily,
+    fontSize: 21,
+    fontWeight: '600',
+    letterSpacing: 0.231,
+    color: Colors.ink,
   },
   subtitle: {
-    fontSize: Typography.fontSize.footnote,
-    color: Colors.textSecondary,
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    color: Colors.inkMuted48,
     marginTop: 2,
   },
   actionContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: 8,
   },
   heroButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.accentSoft,
-    paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.primary, // Action Blue #0066cc
+    paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
-    gap: 5,
+    borderRadius: BorderRadius.pill,
+    gap: 6,
   },
   heroButtonText: {
-    fontSize: Typography.fontSize.footnote,
-    fontWeight: '700',
-    color: Colors.accent,
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 13,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  pressed: {
+    transform: [{ scale: 0.95 }],
   },
 });
-

@@ -13,10 +13,18 @@ import { useSafeWalk } from '../context/SafeWalkContext';
 import { buildEmergencySmsText, buildMapShareUrl } from '../services/alertService';
 import { validateEmergencyContactInput } from '../utils/validation';
 import { AppIcon } from '../components/ui/AppIcon';
+import {
+  Colors,
+  BorderRadius,
+  TypographyStyles,
+  Shadows,
+  Spacing,
+} from '../theme';
+import { Badge } from '../components/common/Badge';
 
 export const SosScreen: React.FC = () => {
   const {
-    theme,
+    themeMode,
     currentLocation,
     contacts,
     addOrUpdateContact,
@@ -29,6 +37,8 @@ export const SosScreen: React.FC = () => {
     triggerSosImmediately,
     resolveSosAlert,
   } = useSafeWalk();
+
+  const isDark = themeMode === 'dark';
 
   const [newName, setNewName] = useState('');
   const [newRelation, setNewRelation] = useState('');
@@ -94,313 +104,438 @@ export const SosScreen: React.FC = () => {
 
   return (
     <ScrollView
-      style={[styles.screen, { backgroundColor: theme.colors.bg }]}
+      style={[
+        styles.screen,
+        { backgroundColor: isDark ? '#000000' : Colors.canvasParchment },
+      ]}
       contentContainerStyle={styles.scrollContent}
     >
-      {/* Honest Emergency Boundary Disclosure */}
+      {/* SECTION 1: Museum Hero Tile ({component.product-tile-light}) */}
       <View
         style={[
-          styles.disclosureBox,
-          { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
-        ]}
-      >
-        <Text style={[styles.disclosureText, { color: theme.colors.textSecondary }]}>
-          Rahat assists you in contacting trusted people and calling official emergency numbers
-          (112 / 1091). It does not replace official police or ambulance dispatch systems.
-        </Text>
-      </View>
-
-      {/* Main SOS Trigger / Countdown / Active Status Card */}
-      <View
-        style={[
-          styles.sosCard,
+          styles.heroTile,
           {
-            backgroundColor: theme.colors.surface,
-            borderColor:
-              sosCountdownRemaining !== null || activeSosAlert
-                ? theme.colors.dangerRed
-                : theme.colors.border,
+            backgroundColor: isDark ? '#161617' : Colors.canvas,
+            borderBottomColor: isDark ? '#272729' : Colors.hairline,
           },
         ]}
       >
-        {sosCountdownRemaining !== null ? (
-          <View style={styles.centerBlock}>
-            <Text style={[styles.countdownNumber, { color: theme.colors.dangerRed }]}>
-              {sosCountdownRemaining}s
+        <View style={styles.heroContent}>
+          {/* Statutory Boundary Pill */}
+          <View style={styles.boundaryPill}>
+            <AppIcon name="shield" size={13} color={Colors.primary} />
+            <Text style={styles.boundaryPillText}>
+              Statutory Boundary: Complements 112/1091 · Does not replace emergency dispatch
             </Text>
-            <Text style={[styles.sosHeading, { color: theme.colors.textPrimary }]}>
-              Preparing Emergency Alert...
-            </Text>
-            <Text style={[styles.metaLine, { color: theme.colors.textSecondary }]}>
-              Tap Cancel if this was an accidental press.
-            </Text>
-            <View style={styles.sosBtnRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Cancel SOS Countdown"
-                onPress={cancelSosCountdown}
-                style={[styles.cancelBtn, { backgroundColor: theme.colors.safeGreen }]}
-              >
-                <Text style={styles.btnTextWhite}>Cancel — I'm Safe</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Send SOS Alert Immediately"
-                onPress={triggerSosImmediately}
-                style={[styles.triggerNowBtn, { backgroundColor: theme.colors.dangerRed }]}
-              >
-                <Text style={styles.btnTextWhite}>Send Now</Text>
-              </Pressable>
-            </View>
           </View>
-        ) : activeSosAlert ? (
-          <View style={styles.activeBlock}>
-            <View style={styles.activeTop}>
-              <AppIcon name="sos" size={24} color={theme.colors.dangerRed} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.sosHeading, { color: theme.colors.dangerRed }]}>
-                  SOS Alert Active
-                </Text>
-                <Text style={[styles.metaLine, { color: theme.colors.textSecondary }]}>
-                  Triggered at {new Date(activeSosAlert.triggeredAt).toLocaleTimeString()} · Delivery:{' '}
-                  {activeSosAlert.deliveryChannelStatus === 'offline_fallback'
-                    ? 'Offline / SMS Gateway Unconfigured — Use Direct SMS & Call below'
-                    : activeSosAlert.deliveryChannelStatus}
-                </Text>
-              </View>
-            </View>
 
-            {/* Real Per-Contact Status Tracking */}
-            <View style={styles.deliveryList}>
-              {activeSosAlert.contactDeliveries.map((d) => (
-                <View
-                  key={d.contactId}
-                  style={[
-                    styles.deliveryRow,
-                    { backgroundColor: theme.colors.bg, borderColor: theme.colors.border },
-                  ]}
-                >
-                  <Text style={[styles.deliveryName, { color: theme.colors.textPrimary }]}>
-                    {d.contactName} ({d.phone})
-                  </Text>
-                  <Text
-                    style={[
-                      styles.deliveryStatus,
-                      {
-                        color:
-                          d.status === 'sent'
-                            ? theme.colors.safeGreen
-                            : d.status === 'failed'
-                            ? theme.colors.dangerRed
-                            : theme.colors.cautionAmber,
-                      },
-                    ]}
-                  >
-                    {d.status.toUpperCase()} · {d.detail}
-                  </Text>
-                </View>
-              ))}
-            </View>
+          <Text
+            style={[
+              styles.heroHeadline,
+              { color: isDark ? '#ffffff' : Colors.ink },
+            ]}
+          >
+            Emergency Response Hub
+          </Text>
 
-            <View style={styles.sosBtnRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open phone SMS app with emergency location"
-                onPress={openSmsFallback}
-                style={[styles.triggerNowBtn, { backgroundColor: theme.colors.navyPrimary }]}
-              >
-                <Text style={styles.btnTextWhite}>Send via Phone SMS</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Resolve SOS Alert"
-                onPress={resolveSosAlert}
-                style={[styles.cancelBtn, { backgroundColor: theme.colors.safeGreen }]}
-              >
-                <Text style={styles.btnTextWhite}>Mark Resolved</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.centerBlock}>
+          <Text
+            style={[
+              styles.heroLead,
+              { color: isDark ? Colors.bodyMuted : Colors.inkMuted80 },
+            ]}
+          >
+            Instantaneous cryptographic alert broadcast to trusted contacts, live telemetry sharing, and direct official helpline dispatch.
+          </Text>
+
+          {/* Official Helplines Quick Row */}
+          <View style={styles.dialerRow}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Activate Emergency SOS"
-              onPress={beginSosCountdown}
-              style={[styles.giantSosBtn, { backgroundColor: theme.colors.dangerRed }]}
+              accessibilityLabel="Call 112 National Emergency"
+              onPress={() => Linking.openURL('tel:112')}
+              style={({ pressed }) => [
+                styles.dialerPill,
+                styles.dialerEmergency,
+                pressed && styles.pressed,
+              ]}
             >
-              <AppIcon name="sos" size={32} color="#FFFFFF" />
-              <Text style={styles.giantSosText}>ACTIVATE SOS</Text>
-              <Text style={styles.giantSosSub}>Starts confirmation countdown</Text>
+              <AppIcon name="phone" size={14} color="#ffffff" />
+              <Text style={styles.dialerEmergencyText}>Call 112 (National Emergency)</Text>
             </Pressable>
-
-            <Text style={[styles.metaLine, { color: theme.colors.textMuted, textAlign: 'center' }]}>
-              Latest Coordinates: {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)} ·{' '}
-              Source: {currentLocation.source === 'gps' ? 'Device GPS' : 'Demo Coordinates'}
-            </Text>
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Open shareable location map link"
-              onPress={() => Linking.openURL(liveMapUrl)}
-              style={[styles.linkBtn, { borderColor: theme.colors.border }]}
+              accessibilityLabel="Call 1091 Women Helpline"
+              onPress={() => Linking.openURL('tel:1091')}
+              style={({ pressed }) => [
+                styles.dialerPill,
+                styles.dialerWomenDesk,
+                pressed && styles.pressed,
+              ]}
             >
-              <AppIcon name="external" size={14} color={theme.colors.accentViolet} />
-              <Text style={[styles.linkBtnText, { color: theme.colors.accentViolet }]}>
-                Preview Map Link ({liveMapUrl})
-              </Text>
+              <AppIcon name="phone" size={14} color={Colors.primary} />
+              <Text style={styles.dialerWomenDeskText}>Call 1091 (Women Desk)</Text>
             </Pressable>
           </View>
-        )}
-
-        {/* Official Emergency Dialers */}
-        <View style={[styles.dialRow, { borderTopColor: theme.colors.border }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Call National Emergency 112"
-            onPress={() => Linking.openURL('tel:112')}
-            style={[styles.dialBtn, { backgroundColor: theme.colors.dangerBg, borderColor: theme.colors.dangerBorder }]}
-          >
-            <AppIcon name="phone" size={16} color={theme.colors.dangerRed} />
-            <Text style={[styles.dialText, { color: theme.colors.dangerRed }]}>Call 112 (Emergency)</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Call Women Helpline 1091"
-            onPress={() => Linking.openURL('tel:1091')}
-            style={[styles.dialBtn, { backgroundColor: theme.colors.accentVioletSoft, borderColor: theme.colors.accentViolet }]}
-          >
-            <AppIcon name="phone" size={16} color={theme.colors.accentViolet} />
-            <Text style={[styles.dialText, { color: theme.colors.accentViolet }]}>Call 1091 (Women Desk)</Text>
-          </Pressable>
         </View>
       </View>
 
-      {/* Trusted Emergency Contacts CRUD */}
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-        ]}
-      >
-        <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-          Trusted Emergency Contacts ({contacts.length})
-        </Text>
-
-        {contacts.map((contact) => (
+      {/* SECTION 2: Centerpiece SOS Surface */}
+      <View style={styles.centerSection}>
+        <View style={styles.centerInner}>
           <View
-            key={contact.id}
             style={[
-              styles.contactRow,
-              { backgroundColor: theme.colors.bg, borderColor: theme.colors.border },
+              styles.sosTriggerCard,
+              {
+                backgroundColor: isDark ? '#1c1c1e' : Colors.canvas,
+                borderColor:
+                  sosCountdownRemaining !== null || activeSosAlert
+                    ? Colors.red
+                    : isDark
+                    ? '#272729'
+                    : Colors.hairline,
+              },
             ]}
           >
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={[styles.contactName, { color: theme.colors.textPrimary }]}>
-                {contact.name}
-              </Text>
-              <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>
-                {contact.relationship} · {contact.phone} ·{' '}
-                <Text
-                  style={{
-                    color:
-                      contact.verificationStatus === 'verified'
-                        ? theme.colors.safeGreen
-                        : theme.colors.cautionAmber,
-                    fontWeight: '700',
-                  }}
-                >
-                  {contact.verificationStatus === 'verified' ? 'Verified' : 'Unverified'}
-                </Text>
-              </Text>
-            </View>
+            {sosCountdownRemaining !== null ? (
+              /* Countdown State */
+              <View style={styles.stateCenterBlock}>
+                <View style={styles.countdownBadge}>
+                  <Text style={styles.countdownNumber}>{sosCountdownRemaining}</Text>
+                  <Text style={styles.countdownUnit}>sec</Text>
+                </View>
 
-            <View style={styles.contactControls}>
-              {contact.verificationStatus !== 'verified' && (
+                <Text
+                  style={[
+                    styles.stateHeadline,
+                    { color: isDark ? '#ffffff' : Colors.ink },
+                  ]}
+                >
+                  Initiating Emergency Broadcast
+                </Text>
+                <Text style={styles.stateLead}>
+                  Alert will dispatch in {sosCountdownRemaining} seconds. Tap Cancel if pressed accidentally.
+                </Text>
+
+                <View style={styles.stateBtnRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel SOS Countdown"
+                    onPress={cancelSosCountdown}
+                    style={({ pressed }) => [
+                      styles.cancelPillBtn,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.cancelPillText}>Cancel — I'm Safe</Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Send SOS Alert Now"
+                    onPress={triggerSosImmediately}
+                    style={({ pressed }) => [
+                      styles.sendNowPillBtn,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.sendNowPillText}>Send Immediately</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : activeSosAlert ? (
+              /* Active SOS Alert State */
+              <View style={styles.activeAlertBlock}>
+                <View style={styles.activeHeaderRow}>
+                  <View style={styles.activePulseIndicator} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.activeAlertTitle}>
+                      SOS Broadcast Active
+                    </Text>
+                    <Text style={styles.activeAlertMeta}>
+                      Triggered at {new Date(activeSosAlert.triggeredAt).toLocaleTimeString()} · Delivery:{' '}
+                      {activeSosAlert.deliveryChannelStatus === 'offline_fallback'
+                        ? 'Offline SMS Fallback Active'
+                        : activeSosAlert.deliveryChannelStatus}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Per-Contact Delivery Status Tracking */}
+                <View style={styles.deliveryList}>
+                  {activeSosAlert.contactDeliveries.map((d) => (
+                    <View
+                      key={d.contactId}
+                      style={[
+                        styles.deliveryItem,
+                        {
+                          backgroundColor: isDark ? '#272729' : Colors.canvasParchment,
+                          borderColor: isDark ? '#38383a' : Colors.hairline,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.deliveryName,
+                          { color: isDark ? '#ffffff' : Colors.ink },
+                        ]}
+                      >
+                        {d.contactName} ({d.phone})
+                      </Text>
+                      <Badge
+                        label={`${d.status.toUpperCase()} · ${d.detail}`}
+                        type={
+                          d.status === 'sent'
+                            ? 'safe'
+                            : d.status === 'failed'
+                            ? 'danger'
+                            : 'caution'
+                        }
+                      />
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.activeActionRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Send via Phone SMS"
+                    onPress={openSmsFallback}
+                    style={({ pressed }) => [
+                      styles.smsFallbackPill,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <AppIcon name="phone" size={14} color="#ffffff" />
+                    <Text style={styles.smsFallbackText}>Open Direct SMS</Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Resolve SOS Alert"
+                    onPress={resolveSosAlert}
+                    style={({ pressed }) => [
+                      styles.resolvePill,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.resolveText}>Mark Resolved</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              /* Idle Standby State with Monumental SOS Button */
+              <View style={styles.idleBlock}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Verify contact ${contact.name}`}
-                  onPress={() => verifyContact(contact.id)}
-                  style={[styles.smallBtn, { borderColor: theme.colors.border }]}
+                  accessibilityLabel="Activate Emergency SOS"
+                  onPress={beginSosCountdown}
+                  style={({ pressed }) => [
+                    styles.giantSosButton,
+                    pressed && styles.pressed,
+                  ]}
                 >
-                  <Text style={[styles.smallBtnText, { color: theme.colors.safeGreen }]}>Verify</Text>
+                  <AppIcon name="sos" size={36} color="#ffffff" />
+                  <Text style={styles.giantSosTitle}>ACTIVATE SOS</Text>
+                  <Text style={styles.giantSosSubtitle}>
+                    Tap to trigger 5-second cancelable broadcast
+                  </Text>
                 </Pressable>
-              )}
 
-              <Switch
-                accessibilityLabel={`Notify ${contact.name} on SOS`}
-                value={contact.notifyOnSOS}
-                onValueChange={() => handleToggleNotify(contact.id)}
+                {/* Live Telemetry Info */}
+                <View style={styles.telemetryInfoRow}>
+                  <View style={styles.liveCoordPill}>
+                    <AppIcon name="pin" size={13} color={Colors.primary} />
+                    <Text style={styles.liveCoordText}>
+                      {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)} (
+                      {currentLocation.source === 'gps' ? 'GPS Locked' : 'Demo Mode'})
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Open shareable map link"
+                    onPress={() => Linking.openURL(liveMapUrl)}
+                    style={({ pressed }) => [
+                      styles.mapShareBtn,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <AppIcon name="external" size={13} color={Colors.primary} />
+                    <Text style={styles.mapShareText}>Share Live Coordinates</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+
+      {/* SECTION 3: Dark Tile Section ({component.product-tile-dark} #272729) */}
+      <View style={styles.darkTileSection}>
+        <View style={styles.darkTileInner}>
+          <Text style={styles.darkOverline}>TRUSTED NETWORK</Text>
+          <Text style={styles.darkHeadline}>
+            Trusted Emergency Contacts ({contacts.length})
+          </Text>
+          <Text style={styles.darkSub}>
+            Contacts notified with your live coordinates and emergency broadcast upon SOS activation.
+          </Text>
+
+          {/* Contacts List Grid */}
+          <View style={styles.contactsGrid}>
+            {contacts.map((contact) => (
+              <View
+                key={contact.id}
+                style={[
+                  styles.contactCard,
+                  { backgroundColor: Colors.surfaceTile2 },
+                ]}
+              >
+                <View style={styles.contactCardTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.contactName}>{contact.name}</Text>
+                    <Text style={styles.contactMeta}>
+                      {contact.relationship} · {contact.phone}
+                    </Text>
+                  </View>
+
+                  <Badge
+                    label={contact.verificationStatus === 'verified' ? 'Verified' : 'Unverified'}
+                    type={contact.verificationStatus === 'verified' ? 'safe' : 'caution'}
+                  />
+                </View>
+
+                <View style={styles.contactControlRow}>
+                  {contact.verificationStatus !== 'verified' && (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => verifyContact(contact.id)}
+                      style={({ pressed }) => [
+                        styles.verifyBtn,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.verifyBtnText}>Verify Number</Text>
+                    </Pressable>
+                  )}
+
+                  <View style={styles.switchCluster}>
+                    <Text style={styles.switchLabel}>Auto-Alert:</Text>
+                    <Switch
+                      accessibilityLabel={`Notify ${contact.name} on SOS`}
+                      value={contact.notifyOnSOS}
+                      onValueChange={() => handleToggleNotify(contact.id)}
+                      thumbColor="#ffffff"
+                      trackColor={{ false: '#38383a', true: Colors.green }}
+                    />
+                  </View>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove contact ${contact.name}`}
+                    onPress={() => removeContact(contact.id)}
+                    style={({ pressed }) => [
+                      styles.removeBtn,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <AppIcon name="trash" size={15} color={Colors.red} />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+
+      {/* SECTION 4: Add Contact Utility Card ({component.store-utility-card} 18px radius) */}
+      <View style={styles.addContactSection}>
+        <View style={styles.addContactInner}>
+          <View
+            style={[
+              styles.addCard,
+              {
+                backgroundColor: isDark ? '#1c1c1e' : Colors.canvas,
+                borderColor: isDark ? '#272729' : Colors.hairline,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.addCardHeadline,
+                { color: isDark ? '#ffffff' : Colors.ink },
+              ]}
+            >
+              Add Trusted Emergency Contact
+            </Text>
+            <Text style={styles.addCardSub}>
+              Ensure emergency contacts are aware and able to receive SMS alerts with coordinates.
+            </Text>
+
+            <View style={styles.formInputs}>
+              <TextInput
+                accessibilityLabel="Contact Name"
+                placeholder="Full Name (e.g. Meera Verma)"
+                placeholderTextColor={Colors.inkMuted48}
+                value={newName}
+                onChangeText={setNewName}
+                style={[
+                  styles.pillInput,
+                  {
+                    backgroundColor: isDark ? '#272729' : Colors.canvasParchment,
+                    color: isDark ? '#ffffff' : Colors.ink,
+                  },
+                ]}
               />
 
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Delete contact ${contact.name}`}
-                onPress={() => removeContact(contact.id)}
-                style={styles.deleteBtn}
-              >
-                <AppIcon name="trash" size={16} color={theme.colors.dangerRed} />
-              </Pressable>
-            </View>
-          </View>
-        ))}
+              <TextInput
+                accessibilityLabel="Relationship"
+                placeholder="Relationship (e.g. Sister, Mother, Friend)"
+                placeholderTextColor={Colors.inkMuted48}
+                value={newRelation}
+                onChangeText={setNewRelation}
+                style={[
+                  styles.pillInput,
+                  {
+                    backgroundColor: isDark ? '#272729' : Colors.canvasParchment,
+                    color: isDark ? '#ffffff' : Colors.ink,
+                  },
+                ]}
+              />
 
-        {/* Add New Contact Form */}
-        <View style={[styles.addForm, { borderTopColor: theme.colors.border }]}>
-          <Text style={[styles.subHeading, { color: theme.colors.textPrimary }]}>
-            Add Trusted Contact
-          </Text>
-          <View style={styles.addInputs}>
-            <TextInput
-              accessibilityLabel="Contact full name"
-              placeholder="Name (e.g. Meera Verma)"
-              placeholderTextColor={theme.colors.textMuted}
-              value={newName}
-              onChangeText={setNewName}
-              style={[
-                styles.input,
-                { backgroundColor: theme.colors.bg, borderColor: theme.colors.border, color: theme.colors.textPrimary },
+              <TextInput
+                accessibilityLabel="Phone Number"
+                placeholder="Phone Number (+91 ...)"
+                placeholderTextColor={Colors.inkMuted48}
+                value={newPhone}
+                onChangeText={setNewPhone}
+                keyboardType="phone-pad"
+                style={[
+                  styles.pillInput,
+                  {
+                    backgroundColor: isDark ? '#272729' : Colors.canvasParchment,
+                    color: isDark ? '#ffffff' : Colors.ink,
+                  },
+                ]}
+              />
+            </View>
+
+            {contactError && <Text style={styles.formErrorText}>{contactError}</Text>}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save Contact"
+              onPress={handleAddContact}
+              style={({ pressed }) => [
+                styles.saveContactBtn,
+                pressed && styles.pressed,
               ]}
-            />
-            <TextInput
-              accessibilityLabel="Relationship"
-              placeholder="Relationship (e.g. Sister)"
-              placeholderTextColor={theme.colors.textMuted}
-              value={newRelation}
-              onChangeText={setNewRelation}
-              style={[
-                styles.input,
-                { backgroundColor: theme.colors.bg, borderColor: theme.colors.border, color: theme.colors.textPrimary },
-              ]}
-            />
-            <TextInput
-              accessibilityLabel="Contact phone number"
-              placeholder="Phone (+91 ...)"
-              placeholderTextColor={theme.colors.textMuted}
-              value={newPhone}
-              onChangeText={setNewPhone}
-              keyboardType="phone-pad"
-              style={[
-                styles.input,
-                { backgroundColor: theme.colors.bg, borderColor: theme.colors.border, color: theme.colors.textPrimary },
-              ]}
-            />
+            >
+              <AppIcon name="plus" size={15} color="#ffffff" />
+              <Text style={styles.saveContactBtnText}>Save Trusted Contact</Text>
+            </Pressable>
           </View>
-          {contactError && (
-            <Text style={[styles.errorText, { color: theme.colors.dangerRed }]}>{contactError}</Text>
-          )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Save Trusted Contact"
-            onPress={handleAddContact}
-            style={[styles.saveBtn, { backgroundColor: theme.colors.navyPrimary }]}
-          >
-            <AppIcon name="plus" size={16} color={theme.colors.navyText} />
-            <Text style={[styles.saveBtnText, { color: theme.colors.navyText }]}>
-              Save Trusted Contact
-            </Text>
-          </Pressable>
         </View>
       </View>
     </ScrollView>
@@ -408,80 +543,477 @@ export const SosScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  scrollContent: { padding: 16, gap: 14, paddingBottom: 36, maxWidth: 920, width: '100%', alignSelf: 'center' },
-  disclosureBox: { padding: 14, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
-  disclosureText: { fontSize: 13, lineHeight: 18, letterSpacing: -0.2 },
-  sosCard: {
-    padding: 20,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    gap: 16,
-    shadowColor: '#FF3B30',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
+  screen: {
+    flex: 1,
   },
-  centerBlock: { alignItems: 'center', gap: 14 },
-  giantSosBtn: {
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  pressed: {
+    transform: [{ scale: 0.95 }], // Exact DESIGN.md micro-interaction
+  },
+
+  // SECTION 1: Museum Hero Tile ({component.product-tile-light})
+  heroTile: {
     width: '100%',
-    maxWidth: 320,
-    minHeight: 110,
-    borderRadius: 28,
+    paddingVertical: 56,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    alignItems: 'center',
+  },
+  heroContent: {
+    width: '100%',
+    maxWidth: 980,
+    alignItems: 'center',
+  },
+  boundaryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: '#e8f2ff',
+    marginBottom: 16,
+  },
+  boundaryPillText: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 11,
+    color: Colors.primary,
+  },
+  heroHeadline: {
+    fontFamily: TypographyStyles.displayLg.fontFamily,
+    fontSize: 38,
+    fontWeight: '600',
+    lineHeight: 44,
+    letterSpacing: 0,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  heroLead: {
+    fontFamily: TypographyStyles.lead.fontFamily,
+    fontSize: 19,
+    fontWeight: '400',
+    lineHeight: 26,
+    letterSpacing: 0.196,
+    textAlign: 'center',
+    maxWidth: 680,
+    marginBottom: 24,
+  },
+  dialerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    padding: 16,
-    shadowColor: '#FF3B30',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  giantSosText: { color: '#FFFFFF', fontSize: 21, fontWeight: '700', letterSpacing: 0.5 },
-  giantSosSub: { color: 'rgba(255, 255, 255, 0.9)', fontSize: 12.5, fontWeight: '500', letterSpacing: -0.1 },
-  countdownNumber: { fontSize: 52, fontWeight: '800', letterSpacing: -1 },
-  sosHeading: { fontSize: 19, fontWeight: '700', letterSpacing: -0.3 },
-  sosBtnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
-  cancelBtn: { minHeight: 44, paddingHorizontal: 22, borderRadius: 9999, justifyContent: 'center', alignItems: 'center' },
-  triggerNowBtn: { minHeight: 44, paddingHorizontal: 22, borderRadius: 9999, justifyContent: 'center', alignItems: 'center' },
-  btnTextWhite: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '600', letterSpacing: -0.2 },
-  activeBlock: { gap: 12 },
-  activeTop: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  deliveryList: { gap: 8 },
-  deliveryRow: { padding: 12, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, gap: 3 },
-  deliveryName: { fontSize: 14, fontWeight: '700', letterSpacing: -0.2 },
-  deliveryStatus: { fontSize: 12.5, fontWeight: '600', letterSpacing: -0.1 },
-  linkBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 9999, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  linkBtnText: { fontSize: 12.5, fontWeight: '600', letterSpacing: -0.15 },
-  dialRow: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  dialBtn: { flex: 1, minWidth: 150, minHeight: 44, borderRadius: 9999, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 },
-  dialText: { fontSize: 13.5, fontWeight: '600', letterSpacing: -0.2 },
-  card: {
-    padding: 18,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
+    flexWrap: 'wrap',
     gap: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  sectionTitle: { fontSize: 17, fontWeight: '700', letterSpacing: -0.3 },
-  contactRow: { padding: 14, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  contactName: { fontSize: 14.5, fontWeight: '700', letterSpacing: -0.2 },
-  metaLine: { fontSize: 12.5, lineHeight: 18, letterSpacing: -0.15 },
-  contactControls: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  smallBtn: { minHeight: 34, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, justifyContent: 'center' },
-  smallBtnText: { fontSize: 12, fontWeight: '700' },
-  deleteBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  addForm: { borderTopWidth: 1, paddingTop: 12, gap: 10 },
-  subHeading: { fontSize: 14, fontWeight: '700' },
-  addInputs: { gap: 8 },
-  input: { minHeight: 42, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 14 },
-  errorText: { fontSize: 12, fontWeight: '600' },
-  saveBtn: { minHeight: 44, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  saveBtnText: { fontSize: 14, fontWeight: '700' },
+  dialerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: BorderRadius.pill,
+  },
+  dialerEmergency: {
+    backgroundColor: Colors.red,
+  },
+  dialerEmergencyText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  dialerWomenDesk: {
+    backgroundColor: '#e8f2ff',
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  dialerWomenDeskText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+
+  // SECTION 2: Centerpiece SOS Surface
+  centerSection: {
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    width: '100%',
+  },
+  centerInner: {
+    width: '100%',
+    maxWidth: 720,
+  },
+  sosTriggerCard: {
+    borderRadius: BorderRadius.lg, // 18px
+    borderWidth: 1.5,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Standby Idle Block
+  idleBlock: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 20,
+  },
+  giantSosButton: {
+    width: '100%',
+    maxWidth: 320,
+    height: 120,
+    borderRadius: BorderRadius.pill, // Signature Apple pill
+    backgroundColor: Colors.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 20,
+  },
+  giantSosTitle: {
+    fontFamily: TypographyStyles.tagline.fontFamily,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  giantSosSubtitle: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+    letterSpacing: -0.12,
+  },
+  telemetryInfoRow: {
+    alignItems: 'center',
+    gap: 10,
+  },
+  liveCoordPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  liveCoordText: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    color: Colors.inkMuted48,
+  },
+  mapShareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+  },
+  mapShareText: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '500',
+  },
+
+  // Countdown State
+  stateCenterBlock: {
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+  },
+  countdownBadge: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: Colors.redLight,
+    borderWidth: 2,
+    borderColor: Colors.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  countdownNumber: {
+    fontFamily: TypographyStyles.heroDisplay.fontFamily,
+    fontSize: 38,
+    fontWeight: '700',
+    color: Colors.red,
+    lineHeight: 42,
+  },
+  countdownUnit: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.red,
+    textTransform: 'uppercase',
+  },
+  stateHeadline: {
+    fontFamily: TypographyStyles.displayMd.fontFamily,
+    fontSize: 22,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  stateLead: {
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 14,
+    color: Colors.inkMuted80,
+    textAlign: 'center',
+    maxWidth: 440,
+  },
+  stateBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  cancelPillBtn: {
+    backgroundColor: Colors.green,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    borderRadius: BorderRadius.pill,
+  },
+  cancelPillText: {
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  sendNowPillBtn: {
+    backgroundColor: Colors.red,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    borderRadius: BorderRadius.pill,
+  },
+  sendNowPillText: {
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+
+  // Active Broadcast State
+  activeAlertBlock: {
+    width: '100%',
+    gap: 16,
+  },
+  activeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  activePulseIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: Colors.red,
+  },
+  activeAlertTitle: {
+    fontFamily: TypographyStyles.bodyStrong.fontFamily,
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.red,
+  },
+  activeAlertMeta: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 12,
+    color: Colors.inkMuted48,
+  },
+  deliveryList: {
+    gap: 8,
+  },
+  deliveryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  deliveryName: {
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  activeActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
+  smsFallbackPill: {
+    backgroundColor: Colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: BorderRadius.pill,
+  },
+  smsFallbackText: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  resolvePill: {
+    backgroundColor: Colors.green,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: BorderRadius.pill,
+  },
+  resolveText: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+
+  // SECTION 3: Dark Tile Section ({component.product-tile-dark} #272729)
+  darkTileSection: {
+    backgroundColor: Colors.surfaceTile1,
+    paddingVertical: 48,
+    paddingHorizontal: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  darkTileInner: {
+    width: '100%',
+    maxWidth: 980,
+  },
+  darkOverline: {
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primaryOnDark,
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  darkHeadline: {
+    fontFamily: TypographyStyles.displayMd.fontFamily,
+    fontSize: 28,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: -0.374,
+    marginBottom: 6,
+  },
+  darkSub: {
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 15,
+    color: Colors.bodyMuted,
+    marginBottom: 24,
+  },
+  contactsGrid: {
+    gap: 14,
+  },
+  contactCard: {
+    borderRadius: BorderRadius.md, // 11px
+    padding: 18,
+    gap: 12,
+  },
+  contactCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  contactName: {
+    fontFamily: TypographyStyles.bodyStrong.fontFamily,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  contactMeta: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    color: Colors.bodyMuted,
+    marginTop: 2,
+  },
+  contactControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    paddingTop: 10,
+  },
+  verifyBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.green,
+  },
+  verifyBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.green,
+  },
+  switchCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  switchLabel: {
+    fontSize: 12,
+    color: Colors.bodyMuted,
+  },
+  removeBtn: {
+    padding: 6,
+  },
+
+  // SECTION 4: Add Contact Utility Card ({component.store-utility-card} 18px radius)
+  addContactSection: {
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    width: '100%',
+  },
+  addContactInner: {
+    width: '100%',
+    maxWidth: 720,
+  },
+  addCard: {
+    borderRadius: BorderRadius.lg, // 18px
+    borderWidth: 1,
+    padding: 24, // 24px
+    gap: 14,
+  },
+  addCardHeadline: {
+    fontFamily: TypographyStyles.tagline.fontFamily,
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  addCardSub: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    color: Colors.inkMuted48,
+  },
+  formInputs: {
+    gap: 10,
+    marginTop: 6,
+  },
+  pillInput: {
+    height: 44,
+    borderRadius: BorderRadius.pill,
+    paddingHorizontal: 16,
+    fontSize: 15,
+  },
+  formErrorText: {
+    fontSize: 13,
+    color: Colors.red,
+  },
+  saveContactBtn: {
+    backgroundColor: Colors.primary,
+    height: 44,
+    borderRadius: BorderRadius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  saveContactBtnText: {
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
 });

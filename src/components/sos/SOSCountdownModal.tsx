@@ -4,11 +4,10 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Pressable,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../theme';
+import { Colors, Spacing, TypographyStyles, BorderRadius } from '../../theme';
 import { Button } from '../common/Button';
 
 interface SOSCountdownModalProps {
@@ -37,47 +36,41 @@ export const SOSCountdownModal: React.FC<SOSCountdownModalProps> = ({
         <View style={styles.contentCard}>
           {/* Header Warning */}
           <View style={styles.warningPill}>
-            <MaterialCommunityIcons name="alert-octagon" size={18} color={Colors.red} />
-            <Text style={styles.warningPillText}>EMERGENCY PROTOCOL TRIGGER</Text>
+            <MaterialCommunityIcons name="alert-octagon" size={16} color={Colors.red} />
+            <Text style={styles.warningPillText}>EMERGENCY PROTOCOL</Text>
           </View>
 
           <Text style={styles.title}>Activating SOS Alert</Text>
           <Text style={styles.subtitle}>
-            Your real-time GPS location will be broadcast to all selected emergency contacts and SafeCircle members in:
+            Your real-time GPS coordinates will be dispatched to trusted contacts and SafeCircles in:
           </Text>
 
           {/* Large Countdown Circle */}
           <View style={styles.countdownContainer}>
-            <View style={styles.outerRing}>
-              <View style={styles.innerRing}>
-                <Text style={styles.countdownText}>{secondsRemaining}</Text>
-                <Text style={styles.countdownLabel}>SECONDS</Text>
-              </View>
+            <View style={styles.countdownRing}>
+              <Text style={styles.countdownText}>{secondsRemaining}</Text>
+              <Text style={styles.countdownLabel}>SECONDS</Text>
             </View>
           </View>
 
           <Text style={styles.infoNote}>
-            Tapping "Cancel" stops the dispatch immediately if pressed by mistake.
+            Tapping "Cancel — I'm Safe" halts dispatch immediately if pressed by mistake.
           </Text>
 
           {/* Action Buttons */}
-          <View style={styles.buttonGroup}>
+          <View style={styles.buttonRow}>
             <Button
-              title="CANCEL — I AM SAFE"
-              variant="outline"
-              size="lg"
+              title="Cancel — I'm Safe"
               onPress={onCancel}
+              variant="pearl"
               style={styles.cancelButton}
-              textStyle={styles.cancelButtonText}
             />
 
             <Button
-              title="SEND SOS IMMEDIATELY"
-              variant="danger"
-              size="md"
-              icon={<MaterialCommunityIcons name="flash-alert" size={20} color="#FFF" />}
+              title="Send Immediately"
               onPress={onTriggerNow}
-              style={styles.immediateButton}
+              variant="danger"
+              style={styles.triggerNowButton}
             />
           </View>
         </View>
@@ -89,111 +82,105 @@ export const SOSCountdownModal: React.FC<SOSCountdownModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(11, 19, 43, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.52)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing.xl,
+    padding: 20,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
   },
   contentCard: {
+    backgroundColor: Colors.canvas,
+    borderRadius: BorderRadius.xl, // 24px (Apple Sheet)
+    padding: 24,
     width: '100%',
-    maxWidth: 380,
-    backgroundColor: Colors.card,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xxl,
+    maxWidth: 440,
     alignItems: 'center',
-    ...Shadows.prominent,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
   },
   warningPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.redLight,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.redBorder,
     gap: 6,
-    marginBottom: Spacing.md,
+    marginBottom: 16,
   },
   warningPillText: {
-    fontSize: Typography.fontSize.caption,
-    fontWeight: '800',
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 11,
+    fontWeight: '700',
     color: Colors.red,
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   title: {
-    fontSize: Typography.fontSize.title2,
-    fontWeight: '800',
-    color: Colors.text,
+    fontFamily: TypographyStyles.displayMd.fontFamily,
+    fontSize: 22,
+    fontWeight: '600',
+    color: Colors.ink,
+    letterSpacing: -0.374,
+    marginBottom: 6,
     textAlign: 'center',
-    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: Typography.fontSize.body,
-    color: Colors.textSecondary,
+    fontFamily: TypographyStyles.body.fontFamily,
+    fontSize: 14,
+    color: Colors.inkMuted80,
     textAlign: 'center',
-    lineHeight: Typography.lineHeight.body,
-    marginBottom: Spacing.lg,
+    lineHeight: 20,
+    marginBottom: 20,
   },
   countdownContainer: {
-    marginVertical: Spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
+    marginVertical: 12,
   },
-  outerRing: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+  countdownRing: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: Colors.red,
     backgroundColor: Colors.redLight,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.redBorder,
-  },
-  innerRing: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: Colors.red,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.prominent,
   },
   countdownText: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    lineHeight: 52,
+    fontFamily: TypographyStyles.heroDisplay.fontFamily,
+    fontSize: 42,
+    fontWeight: '700',
+    color: Colors.red,
+    lineHeight: 46,
   },
   countdownLabel: {
     fontSize: 10,
-    fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.85)',
-    letterSpacing: 1,
+    fontWeight: '700',
+    color: Colors.red,
+    letterSpacing: 0.5,
   },
   infoNote: {
-    fontSize: Typography.fontSize.footnote,
-    color: Colors.textMuted,
+    fontFamily: TypographyStyles.finePrint.fontFamily,
+    fontSize: 12,
+    color: Colors.inkMuted48,
     textAlign: 'center',
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.lg,
+    marginVertical: 14,
   },
-  buttonGroup: {
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
     width: '100%',
-    gap: Spacing.md,
+    marginTop: 6,
   },
   cancelButton: {
-    borderColor: Colors.border,
-    borderWidth: 2,
-    backgroundColor: Colors.surfaceSubtle,
+    flex: 1,
   },
-  cancelButtonText: {
-    color: Colors.text,
-    fontWeight: '800',
-  },
-  immediateButton: {
-    backgroundColor: Colors.redDark,
+  triggerNowButton: {
+    flex: 1,
   },
 });
-

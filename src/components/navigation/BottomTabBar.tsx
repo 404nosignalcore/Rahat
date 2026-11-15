@@ -4,10 +4,17 @@ import { useSafeWalk } from '../../context/SafeWalkContext';
 import { getTranslation } from '../../i18n/translations';
 import { AppTab } from '../../types/safety';
 import { AppIcon, AppIconName } from '../ui/AppIcon';
+import { Colors, BorderRadius, TypographyStyles } from '../../theme';
 
 export const BottomTabBar: React.FC = () => {
-  const { activeTab, setActiveTab, language, theme, activeSosAlert, sosCountdownRemaining } =
-    useSafeWalk();
+  const {
+    activeTab,
+    setActiveTab,
+    language,
+    themeMode,
+    activeSosAlert,
+    sosCountdownRemaining,
+  } = useSafeWalk();
   const t = getTranslation(language);
 
   const items: { id: AppTab; label: string; icon: AppIconName }[] = [
@@ -18,7 +25,8 @@ export const BottomTabBar: React.FC = () => {
     { id: 'profile', label: t.tabs.profile, icon: 'profile' },
   ];
 
-  const sosBusy = Boolean(activeSosAlert) || sosCountdownRemaining !== null;
+  const isDark = themeMode === 'dark';
+  const sosActive = Boolean(activeSosAlert) || sosCountdownRemaining !== null;
 
   return (
     <View
@@ -26,126 +34,167 @@ export const BottomTabBar: React.FC = () => {
       style={[
         styles.container,
         {
-          backgroundColor: theme.colors.tabBarBg,
-          borderTopColor: theme.colors.tabBarBorder,
+          backgroundColor: isDark ? '#161617' : Colors.canvas,
+          borderTopColor: isDark ? '#272729' : Colors.hairline,
         },
       ]}
     >
-      {items.map((item) => {
-        const isActive = activeTab === item.id;
-        if (item.id === 'sos') {
-          return (
-            <View key={item.id} style={styles.sosSlot}>
+      <View style={styles.innerBar}>
+        {items.map((item) => {
+          const isActive = activeTab === item.id;
+          const isSos = item.id === 'sos';
+
+          if (isSos) {
+            return (
               <Pressable
+                key={item.id}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: isActive }}
-                accessibilityLabel="Emergency SOS Tab"
+                accessibilityLabel="Emergency SOS Quick Action"
                 onPress={() => setActiveTab('sos')}
+                style={({ pressed }) => [
+                  styles.tabButton,
+                  styles.sosTabSlot,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.sosCapsule,
+                    {
+                      backgroundColor: sosActive
+                        ? Colors.redDark
+                        : isActive
+                        ? Colors.red
+                        : isDark
+                        ? '#2c1515'
+                        : '#ffebea',
+                      borderColor: sosActive || isActive ? Colors.red : Colors.redBorder,
+                    },
+                  ]}
+                >
+                  <AppIcon
+                    name="sos"
+                    size={17}
+                    color={sosActive || isActive ? '#ffffff' : Colors.red}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.sosLabel,
+                      {
+                        color: sosActive || isActive ? '#ffffff' : Colors.red,
+                        fontWeight: isActive ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          }
+
+          const activeColor = isDark ? Colors.primaryOnDark : Colors.primary; // Action Blue #0066cc
+          const inactiveColor = isDark ? '#8e8e93' : Colors.inkMuted48;
+
+          return (
+            <Pressable
+              key={item.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={`${item.label} Tab`}
+              onPress={() => setActiveTab(item.id)}
+              style={({ pressed }) => [
+                styles.tabButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View
                 style={[
-                  styles.sosButton,
+                  styles.activeDot,
+                  { backgroundColor: isActive ? activeColor : 'transparent' },
+                ]}
+              />
+              <AppIcon
+                name={item.icon}
+                size={20}
+                color={isActive ? activeColor : inactiveColor}
+              />
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.tabLabel,
                   {
-                    backgroundColor: sosBusy ? '#991B1B' : theme.colors.dangerRed,
-                    borderColor: theme.colors.tabBarBg,
+                    color: isActive ? activeColor : inactiveColor,
+                    fontWeight: isActive ? '600' : '400',
                   },
                 ]}
               >
-                <AppIcon name="sos" size={24} color="#FFFFFF" />
-                <Text numberOfLines={1} style={styles.sosLabel}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            </View>
+                {item.label}
+              </Text>
+            </Pressable>
           );
-        }
-
-        const color = isActive ? theme.colors.accentViolet : theme.colors.textMuted;
-
-        return (
-          <Pressable
-            key={item.id}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: isActive }}
-            accessibilityLabel={`${item.label} Tab`}
-            onPress={() => setActiveTab(item.id)}
-            style={styles.tabButton}
-          >
-            <View
-              style={[
-                styles.activeIndicator,
-                { backgroundColor: isActive ? theme.colors.accentViolet : 'transparent' },
-              ]}
-            />
-            <AppIcon name={item.icon} size={20} color={color} />
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.tabLabel,
-                {
-                  color,
-                  fontWeight: isActive ? '700' : '500',
-                },
-              ]}
-            >
-              {item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+        })}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    height: 64,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    height: 64, // Exact DESIGN.md spec: 64px
+    borderTopWidth: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  innerBar: {
+    width: '100%',
+    maxWidth: 720,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 8,
-    paddingBottom: 2,
+    justifyContent: 'space-between',
+  },
+  pressed: {
+    transform: [{ scale: 0.95 }], // Exact DESIGN.md micro-interaction
   },
   tabButton: {
     flex: 1,
-    minHeight: 46,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
     position: 'relative',
   },
-  activeIndicator: {
-    width: 20,
-    height: 2.5,
-    borderRadius: 9999,
+  activeDot: {
+    width: 14,
+    height: 2,
+    borderRadius: 1,
     marginBottom: 2,
   },
   tabLabel: {
-    fontSize: 10.5,
-    letterSpacing: -0.15,
+    fontFamily: TypographyStyles.navLink.fontFamily,
+    fontSize: 11,
+    letterSpacing: -0.12,
   },
-  sosSlot: {
-    flex: 1,
+  sosTabSlot: {
+    paddingHorizontal: 4,
+  },
+  sosCapsule: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sosButton: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    marginTop: -22,
-    borderWidth: 3.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#FF3B30',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.pill, // Apple pill
+    borderWidth: 1,
   },
   sosLabel: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 12,
+    letterSpacing: -0.12,
   },
 });
