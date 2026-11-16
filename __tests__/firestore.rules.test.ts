@@ -27,12 +27,16 @@ describe('Firestore Security Rules', () => {
     expect(rulesContent.includes('allow list: if isSignedIn() && resource.data.abuseFlags < 5;')).toBe(true);
     expect(rulesContent.includes('allow get: if isValidId(postId) && isSignedIn();')).toBe(true);
 
-    // 2. Prevent self-corroboration
+    // 2. Prevent self-corroboration and infinite counter increments
     expect(rulesContent.includes('existing().authorUid != request.auth.uid')).toBe(true);
+    expect(rulesContent.includes('.data.authorUid != request.auth.uid')).toBe(true);
+    // Client cannot directly write corroborationCount on safety_reports doc; handled exclusively by server trigger
+    expect(!rulesContent.includes("hasOnly(['corroborationCount'")).toBe(true);
 
-    // 3. Subcollection abuse flags and corroborations per user
+    // 3. Subcollection abuse flags and corroborations per user; client cannot directly write abuseFlags
     expect(rulesContent.includes('match /abuse_flags/{flagUserId}')).toBe(true);
     expect(rulesContent.includes('match /corroborations/{corroboratorUid}')).toBe(true);
+    expect(!rulesContent.includes("hasOnly(['abuseFlags'")).toBe(true);
 
     // 4. Contact verification status is admin-only (client cannot modify)
     expect(rulesContent.includes('incoming().verificationStatus == existing().verificationStatus')).toBe(true);

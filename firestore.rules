@@ -274,10 +274,9 @@ service cloud.firestore {
           && incoming().authorUid == existing().authorUid
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
-          && (
-            (incoming().diff(existing()).affectedKeys().hasOnly(['corroborationCount', 'updatedAt']) && existing().authorUid != request.auth.uid && incoming().corroborationCount == existing().corroborationCount + 1) ||
-            (incoming().diff(existing()).affectedKeys().hasOnly(['outdatedFlags', 'updatedAt']) && incoming().outdatedFlags == existing().outdatedFlags + 1)
-          )
+          && incoming().diff(existing()).affectedKeys().hasOnly(['outdatedFlags', 'updatedAt'])
+          && existing().authorUid != request.auth.uid
+          && incoming().outdatedFlags == existing().outdatedFlags + 1
         ));
       allow delete: if isValidId(reportId) && isVerifiedUser() && (existing().authorUid == request.auth.uid || isAdmin());
 
@@ -476,10 +475,8 @@ service cloud.firestore {
           && incoming().authorUid == existing().authorUid
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
-          && (
-            (incoming().diff(existing()).affectedKeys().hasOnly(['helpfulCount', 'updatedAt']) && incoming().helpfulCount == existing().helpfulCount + 1) ||
-            (incoming().diff(existing()).affectedKeys().hasOnly(['abuseFlags', 'updatedAt']) && incoming().abuseFlags == existing().abuseFlags + 1)
-          )
+          && incoming().diff(existing()).affectedKeys().hasOnly(['helpfulCount', 'updatedAt'])
+          && incoming().helpfulCount == existing().helpfulCount + 1
         ));
       allow delete: if isValidId(postId) && isVerifiedUser() && (existing().authorUid == request.auth.uid || isAdmin());
     }
