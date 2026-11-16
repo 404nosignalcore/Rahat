@@ -15,6 +15,7 @@
     "web": "expo start --web",
     "build:web": "expo export --platform web",
     "server": "node server.js",
+    "pretest": "node scripts/patch-expo-modules.js",
     "test": "jest --watchAll=false",
     "typecheck": "tsc --noEmit"
   },

@@ -65,4 +65,14 @@ if (fs.existsSync(srPath)) {
   }
 }
 
+// 6. Patch expo/virtual/env.js for CommonJS/Jest compatibility
+const envPath = path.join(__dirname, '../node_modules/expo/virtual/env.js');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  if (envContent.includes('export const env')) {
+    fs.writeFileSync(envPath, 'exports.env = process.env;\nmodule.exports = { env: process.env };\n', 'utf8');
+    console.log('[Rahat] Patched: expo/virtual/env.js');
+  }
+}
+
 console.log('[Rahat] All Expo Core native modules patched successfully.');

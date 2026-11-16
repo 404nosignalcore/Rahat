@@ -23,16 +23,21 @@ export const dispatchSosAlert = onCall(async (request) => {
   }
 
   const uid = request.auth.uid;
-  const { alertId, latitude, longitude, mapShareUrl } = request.data as {
+  const { alertId, latitude, longitude, mapShareUrl, isFallbackLocation, locationSource } = request.data as {
     alertId: string;
     latitude: number;
     longitude: number;
     mapShareUrl: string;
+    isFallbackLocation?: boolean;
+    locationSource?: string;
   };
 
   if (!alertId || typeof latitude !== 'number' || typeof longitude !== 'number') {
     throw new HttpsError('invalid-argument', 'Valid alertId and coordinates are required.');
   }
+
+  const isFallback = Boolean(isFallbackLocation || locationSource === 'fallback_demo');
+  const warningPrefix = isFallback ? '[CRITICAL WARNING: GPS UNAVAILABLE - UNVERIFIED LOCATION]\n' : '';
 
   const contactsSnap = await db
     .collection('users')
@@ -62,10 +67,12 @@ export const dispatchSosAlert = onCall(async (request) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: contact.phone,
-          message: `RAHAT SafeWalk SOS Alert: Check location immediately: ${mapShareUrl}`,
+          message: `${warningPrefix}RAHAT SafeWalk SOS Alert: Check location immediately: ${mapShareUrl}`,
           latitude,
           longitude,
           alertId,
+          isFallbackLocation: isFallback,
+          locationSource: isFallback ? 'fallback_demo' : 'gps',
         }),
       });
 
@@ -100,6 +107,8 @@ export const dispatchSosAlert = onCall(async (request) => {
   await db.collection('emergency_alerts').doc(alertId).set(
     {
       deliveryChannelStatus,
+      isFallbackLocation: isFallback,
+      locationSource: isFallback ? 'fallback_demo' : 'gps',
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }

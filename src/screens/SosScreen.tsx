@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -30,6 +31,7 @@ export const SosScreen: React.FC = () => {
   const {
     themeMode,
     currentLocation,
+    refreshLocation,
     contacts,
     addOrUpdateContact,
     removeContact,
@@ -62,6 +64,7 @@ export const SosScreen: React.FC = () => {
   const [newRelation, setNewRelation] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [contactError, setContactError] = useState<string | null>(null);
+  const [isRefreshingGps, setIsRefreshingGps] = useState(false);
 
   const liveMapUrl = buildMapShareUrl(currentLocation.lat, currentLocation.lng);
 
@@ -109,9 +112,40 @@ export const SosScreen: React.FC = () => {
     });
   };
 
+  const handleRefreshGps = async () => {
+    setIsRefreshingGps(true);
+    try {
+      const fix = await refreshLocation();
+      if (fix.source === 'gps') {
+        Alert.alert(
+          'GPS Signal Locked',
+          'Your device GPS has been acquired successfully. Emergency alerts will now transmit your accurate coordinates.'
+        );
+      } else {
+        Alert.alert(
+          'GPS Still Offline',
+          'Could not acquire live GPS fix. Please ensure device Location / GPS is turned ON and permissions are granted.'
+        );
+      }
+    } catch {
+      Alert.alert('Location Error', 'Unable to query location service.');
+    } finally {
+      setIsRefreshingGps(false);
+    }
+  };
+
   const openSmsFallback = () => {
+    const isFallback =
+      currentLocation.source === 'fallback_demo' ||
+      Boolean(activeSosAlert?.isFallbackLocation) ||
+      activeSosAlert?.locationSource === 'fallback_demo';
     const body = encodeURIComponent(
-      buildEmergencySmsText(currentLocation.lat, currentLocation.lng, new Date().toISOString())
+      buildEmergencySmsText(
+        currentLocation.lat,
+        currentLocation.lng,
+        new Date().toISOString(),
+        isFallback ? 'fallback_demo' : 'gps'
+      )
     );
     const recipients = contacts
       .filter((c) => c.notifyOnSOS)
@@ -253,7 +287,7 @@ export const SosScreen: React.FC = () => {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Send SOS Alert Now"
-                    onPress={triggerSosImmediately}
+                    onPress={() => triggerSosImmediately()}
                     style={({ pressed }) => [
                       styles.sendNowPillBtn,
                       pressed && styles.pressed,
@@ -280,6 +314,16 @@ export const SosScreen: React.FC = () => {
                     </Text>
                   </View>
                 </View>
+
+                {/* Fallback Location Warning in Active Alert */}
+                {(activeSosAlert.isFallbackLocation || activeSosAlert.locationSource === 'fallback_demo') && (
+                  <View style={styles.activeAlertFallbackWarning}>
+                    <AppIcon name="warning" size={16} color="#b45309" />
+                    <Text style={styles.activeAlertFallbackText}>
+                      CRITICAL: Alert sent with unverified demo coordinates (GPS offline). Please call contacts directly to share your actual location.
+                    </Text>
+                  </View>
+                )}
 
                 {/* Per-Contact Delivery Status Tracking */}
                 <View style={styles.deliveryList}>
@@ -346,10 +390,38 @@ export const SosScreen: React.FC = () => {
             ) : (
               /* Idle Standby State with Monumental Red SOS Button */
               <View style={styles.idleBlock}>
+                {/* Prominent High-Visibility GPS Offline Warning Card */}
+                {currentLocation.source === 'fallback_demo' && (
+                  <View style={styles.gpsWarningCard}>
+                    <View style={styles.gpsWarningHeaderRow}>
+                      <AppIcon name="warning" size={18} color="#b45309" />
+                      <Text style={styles.gpsWarningTitle}>Live GPS Unavailable (Demo Mode)</Text>
+                    </View>
+                    <Text style={styles.gpsWarningDesc}>
+                      Device is using simulated New Delhi coordinates ({currentLocation.lat.toFixed(4)}, {currentLocation.lng.toFixed(4)}). SOS alerts and SMS links will NOT reflect your true location until GPS is acquired.
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Grant Permission & Refresh GPS"
+                      onPress={handleRefreshGps}
+                      disabled={isRefreshingGps}
+                      style={({ pressed }) => [
+                        styles.gpsRetryButton,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <AppIcon name="refresh" size={14} color="#ffffff" />
+                      <Text style={styles.gpsRetryButtonText}>
+                        {isRefreshingGps ? 'Querying GPS Hardware...' : 'Grant Permissions & Acquire GPS'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Activate Emergency SOS"
-                  onPress={beginSosCountdown}
+                  onPress={() => beginSosCountdown()}
                   style={({ pressed }) => [
                     styles.giantSosButton,
                     pressed && styles.pressed,
@@ -364,11 +436,25 @@ export const SosScreen: React.FC = () => {
 
                 {/* Live Telemetry Info */}
                 <View style={styles.telemetryInfoRow}>
-                  <View style={styles.liveCoordPill}>
-                    <AppIcon name="pin" size={13} color={Colors.primary} />
-                    <Text style={styles.liveCoordText}>
-                      {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)} (
-                      {currentLocation.source === 'gps' ? 'GPS Locked' : 'Demo Mode'})
+                  <View
+                    style={[
+                      styles.liveCoordPill,
+                      currentLocation.source === 'fallback_demo' && styles.liveCoordPillFallback,
+                    ]}
+                  >
+                    <AppIcon
+                      name={currentLocation.source === 'gps' ? 'pin' : 'warning'}
+                      size={13}
+                      color={currentLocation.source === 'gps' ? Colors.primary : '#b45309'}
+                    />
+                    <Text
+                      style={[
+                        styles.liveCoordText,
+                        currentLocation.source === 'fallback_demo' && styles.liveCoordTextFallback,
+                      ]}
+                    >
+                      {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)} ·{' '}
+                      {currentLocation.source === 'gps' ? 'GPS Locked' : 'Demo Fallback (Unverified)'}
                     </Text>
                   </View>
 
@@ -728,6 +814,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 20,
   },
+  gpsWarningCard: {
+    width: '100%',
+    maxWidth: 480,
+    backgroundColor: '#fffbeb',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+    padding: 14,
+    gap: 8,
+  },
+  gpsWarningHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  gpsWarningTitle: {
+    fontFamily: TypographyStyles.bodyStrong.fontFamily,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400e',
+  },
+  gpsWarningDesc: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 12,
+    color: '#78350f',
+    lineHeight: 17,
+  },
+  gpsRetryButton: {
+    backgroundColor: '#d97706',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.pill,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  gpsRetryButtonText: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
   giantSosButton: {
     width: '100%',
     maxWidth: 320,
@@ -761,10 +892,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  liveCoordPillFallback: {
+    backgroundColor: '#fef3c7',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: BorderRadius.sm,
+  },
   liveCoordText: {
     fontFamily: TypographyStyles.caption.fontFamily,
     fontSize: 13,
     color: Colors.inkMuted48,
+  },
+  liveCoordTextFallback: {
+    color: '#b45309',
+    fontWeight: '600',
   },
   mapShareBtn: {
     flexDirection: 'row',
@@ -882,6 +1023,24 @@ const styles = StyleSheet.create({
     fontFamily: TypographyStyles.finePrint.fontFamily,
     fontSize: 12,
     color: Colors.inkMuted48,
+  },
+  activeAlertFallbackWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+    padding: 12,
+    borderRadius: BorderRadius.md,
+  },
+  activeAlertFallbackText: {
+    flex: 1,
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
+    lineHeight: 16,
   },
   deliveryList: {
     gap: 8,

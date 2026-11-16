@@ -49,6 +49,8 @@ export interface INotificationService {
     latitude: number;
     longitude: number;
     contacts: EmergencyContact[];
+    locationSource?: 'gps' | 'fallback_demo';
+    isFallbackLocation?: boolean;
   }): Promise<SosAlertRecord>;
 }
 

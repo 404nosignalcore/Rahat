@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 import {
   AppLanguage,
   AppTab,
@@ -42,6 +43,7 @@ import {
 } from '../utils/deviationEngine';
 import { canSubmitWithSpamCooldown } from '../utils/validation';
 import { locationService } from '../services/locationAdapter';
+import { LocationFix } from '../services/contracts';
 import { routeService } from '../services/routeService';
 import { alertService, buildMapShareUrl } from '../services/alertService';
 import {
@@ -128,6 +130,7 @@ interface SafeWalkContextValue {
 
   // Route & Journey Monitoring
   currentLocation: { lat: number; lng: number; accuracyMeters: number; source: 'gps' | 'fallback_demo' };
+  refreshLocation: () => Promise<LocationFix>;
   routes: RouteOption[];
   selectedRoute: RouteOption;
   setSelectedRoute: (r: RouteOption) => void;
@@ -151,7 +154,7 @@ interface SafeWalkContextValue {
   activeSosAlert: SosAlertRecord | null;
   beginSosCountdown: () => void;
   cancelSosCountdown: () => void;
-  triggerSosImmediately: () => Promise<void>;
+  triggerSosImmediately: (forceFallback?: boolean) => Promise<void>;
   resolveSosAlert: () => Promise<void>;
 
   // Community SOS Rescue Network (Atomic 3-Responder System)
@@ -361,7 +364,7 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (sosCountdownRemaining === null) return;
     if (sosCountdownRemaining <= 0) {
       setSosCountdownRemaining(null);
-      triggerSosImmediately();
+      triggerSosImmediately(true);
       return;
     }
     const timer = setTimeout(() => {
@@ -793,7 +796,88 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const beginSosCountdown = () => {
+  const refreshLocation = async (): Promise<LocationFix> => {
+    try {
+      await locationService.requestForegroundPermission();
+      const fix = await locationService.getCurrentLocation();
+      setCurrentLocation({
+        lat: fix.latitude,
+        lng: fix.longitude,
+        accuracyMeters: fix.accuracyMeters,
+        source: fix.source,
+      });
+      if (fix.source === 'gps') {
+        setStatusBanner('Live GPS signal locked.');
+      } else {
+        setStatusBanner('GPS offline: using simulated fallback coordinates.');
+      }
+      return fix;
+    } catch {
+      setStatusBanner('Unable to acquire GPS fix.');
+      return {
+        latitude: currentLocation.lat,
+        longitude: currentLocation.lng,
+        accuracyMeters: currentLocation.accuracyMeters,
+        timestampMs: Date.now(),
+        source: currentLocation.source,
+      };
+    }
+  };
+
+  const beginSosCountdown = async () => {
+    if (currentLocation.source === 'fallback_demo') {
+      try {
+        const fresh = await locationService.getCurrentLocation();
+        if (fresh.source === 'gps') {
+          setCurrentLocation({
+            lat: fresh.latitude,
+            lng: fresh.longitude,
+            accuracyMeters: fresh.accuracyMeters,
+            source: 'gps',
+          });
+          setSosCountdownRemaining(user.consents.sosCountdownSeconds || 5);
+          return;
+        }
+      } catch {}
+
+      Alert.alert(
+        '⚠️ GPS Unavailable: Demo Coordinates Active',
+        'Device cannot acquire a live GPS signal. Starting SOS now will broadcast simulated demo coordinates (Connaught Place, New Delhi). Your emergency contacts will NOT receive your actual location.\n\nPlease enable location services or confirm if you wish to proceed with an unverified location disclaimer.',
+        [
+          {
+            text: 'Cancel SOS',
+            style: 'cancel',
+            onPress: () => {
+              setStatusBanner('SOS aborted: Live GPS signal required for accurate emergency dispatch.');
+            },
+          },
+          {
+            text: 'Retry GPS',
+            onPress: async () => {
+              const fix = await refreshLocation();
+              if (fix.source === 'gps') {
+                setSosCountdownRemaining(user.consents.sosCountdownSeconds || 5);
+              } else {
+                Alert.alert(
+                  'GPS Still Unavailable',
+                  'Please grant location permissions in device settings and ensure GPS hardware is active.'
+                );
+              }
+            },
+          },
+          {
+            text: 'Send with Warning',
+            style: 'destructive',
+            onPress: () => {
+              setSosCountdownRemaining(user.consents.sosCountdownSeconds || 5);
+              setStatusBanner('⚠️ SOS countdown active with UNVERIFIED location warning.');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setSosCountdownRemaining(user.consents.sosCountdownSeconds || 5);
   };
 
@@ -802,15 +886,64 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setStatusBanner('SOS countdown cancelled safely.');
   };
 
-  const triggerSosImmediately = async () => {
+  const triggerSosImmediately = async (forceFallback = false) => {
+    let loc = currentLocation;
+
+    if (loc.source === 'fallback_demo' && !forceFallback) {
+      try {
+        const fresh = await locationService.getCurrentLocation();
+        if (fresh.source === 'gps') {
+          loc = {
+            lat: fresh.latitude,
+            lng: fresh.longitude,
+            accuracyMeters: fresh.accuracyMeters,
+            source: 'gps',
+          };
+          setCurrentLocation(loc);
+        }
+      } catch {}
+    }
+
+    if (loc.source === 'fallback_demo' && !forceFallback) {
+      setSosCountdownRemaining(null);
+      Alert.alert(
+        '⚠️ GPS Unavailable: Refusing Unverified SOS',
+        'Your live GPS location could not be determined. Triggering SOS without GPS sends hardcoded demo coordinates that could mislead responders.\n\nDo you want to broadcast anyway with an explicit UNVERIFIED LOCATION warning, or cancel?',
+        [
+          {
+            text: 'Cancel SOS',
+            style: 'cancel',
+            onPress: () => {
+              setStatusBanner('SOS cancelled: GPS unavailable.');
+            },
+          },
+          {
+            text: 'Broadcast with Warning',
+            style: 'destructive',
+            onPress: () => {
+              triggerSosImmediately(true);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setSosCountdownRemaining(null);
     const alertRecord = await alertService.dispatchEmergencyAlert({
       ownerUid: user.uid,
-      latitude: currentLocation.lat,
-      longitude: currentLocation.lng,
+      latitude: loc.lat,
+      longitude: loc.lng,
       contacts,
+      locationSource: loc.source,
+      isFallbackLocation: loc.source === 'fallback_demo',
     });
     setActiveSosAlert(alertRecord);
+    if (loc.source === 'fallback_demo') {
+      setStatusBanner('⚠️ SOS Alert dispatched with UNVERIFIED location warning (GPS offline).');
+    } else {
+      setStatusBanner('Emergency SOS Alert dispatched with live GPS location.');
+    }
     if (user.isAuthenticated) {
       try {
         await saveEmergencyAlertDoc(alertRecord, true);
@@ -837,19 +970,45 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   ) => {
     clearCommunityTimeouts();
 
+    let loc = currentLocation;
+    let fallbackWarningNote = '';
+
+    if (loc.source === 'fallback_demo') {
+      try {
+        const fresh = await locationService.getCurrentLocation();
+        if (fresh.source === 'gps') {
+          loc = {
+            lat: fresh.latitude,
+            lng: fresh.longitude,
+            accuracyMeters: fresh.accuracyMeters,
+            source: 'gps',
+          };
+          setCurrentLocation(loc);
+        } else {
+          fallbackWarningNote = '[UNVERIFIED LOCATION - GPS OFFLINE] ';
+        }
+      } catch {
+        fallbackWarningNote = '[UNVERIFIED LOCATION - GPS OFFLINE] ';
+      }
+    }
+
     const victimName = user.displayName || 'SafeWalk Member';
     const victimPhone = user.phone || '+91 98765 43210';
     const victimUid = user.uid || 'usr-local';
 
     const currentReq = createCommunitySosRequest(
       { uid: victimUid, name: victimName, phone: victimPhone },
-      { lat: currentLocation.lat, lng: currentLocation.lng },
+      { lat: loc.lat, lng: loc.lng },
       category,
-      description
+      `${fallbackWarningNote}${description}`
     );
 
     setActiveCommunitySos(currentReq);
-    setStatusBanner(`Community SOS broadcast active (ID: ${currentReq.id}). Alerting nearby members...`);
+    if (loc.source === 'fallback_demo') {
+      setStatusBanner(`⚠️ Community SOS broadcast active with UNVERIFIED coordinates (GPS offline). Alerting nearby members...`);
+    } else {
+      setStatusBanner(`Community SOS broadcast active (ID: ${currentReq.id}). Alerting nearby members...`);
+    }
 
     const candidates = getAvailableCommunityCandidates(currentLocation.lat, currentLocation.lng);
 
@@ -1241,6 +1400,7 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         flagReport,
         addReportComment,
         currentLocation,
+        refreshLocation,
         routes,
         selectedRoute,
         setSelectedRoute,

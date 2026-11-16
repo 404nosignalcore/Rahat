@@ -154,6 +154,8 @@ export interface SosAlertRecord {
   mapShareUrl: string;
   triggeredAt: string;
   contactDeliveries: ContactDeliveryStatus[];
+  locationSource?: 'gps' | 'fallback_demo';
+  isFallbackLocation?: boolean;
 }
 
 export type JourneyStatus = 'idle' | 'active' | 'paused' | 'completed' | 'sos_escalated';

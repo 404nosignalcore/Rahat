@@ -26,7 +26,9 @@ export type AppIconName =
   | 'pause'
   | 'play'
   | 'share'
-  | 'trash';
+  | 'trash'
+  | 'warning'
+  | 'refresh';
 
 const IONICON_MAP: Record<AppIconName, keyof typeof Ionicons.glyphMap> = {
   shield: 'shield-checkmark-outline',
@@ -54,6 +56,8 @@ const IONICON_MAP: Record<AppIconName, keyof typeof Ionicons.glyphMap> = {
   play: 'play-outline',
   share: 'share-social-outline',
   trash: 'trash-outline',
+  warning: 'warning-outline',
+  refresh: 'reload-outline',
 };
 
 export const AppIcon: React.FC<{ name: AppIconName; size?: number; color?: string }> = ({
