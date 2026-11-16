@@ -578,9 +578,12 @@ export const INITIAL_USER_PROFILE: UserProfile = {
   uid: 'demo-user',
   email: 'nullpointbuilds007@gmail.com',
   displayName: 'Aarushi Verma',
+  name: 'Aarushi Verma',
   phone: '+91 9876543210',
   preferredLanguage: 'en',
   role: 'citizen',
+  photoUrl: undefined,
+  photoURL: undefined,
   isAuthenticated: false,
   isDemoSession: true,
   consents: {

@@ -366,23 +366,46 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Static File Serving from dist/
-  let reqPath = decodeURI(pathname);
-  if (reqPath === '/' || reqPath === '') {
-    reqPath = '/index.html';
+  // Hardened Static File Serving strictly from DIST_DIR (Build output only)
+  let decodedPath = '';
+  try {
+    decodedPath = decodeURIComponent(pathname);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Bad Request: Malformed URI');
+    return;
   }
 
-  let filePath = path.join(DIST_DIR, reqPath);
+  // Remove null bytes and normalize
+  const sanitizedPath = path.normalize(decodedPath.replace(/\0/g, ''));
+  let relativePath = sanitizedPath === '/' || sanitizedPath === '' || sanitizedPath === '\\'
+    ? 'index.html'
+    : sanitizedPath.replace(/^[/\\]+/, '');
 
-  // Fallback to index.html for SPA routing
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(DIST_DIR, 'index.html');
+  let filePath = path.resolve(DIST_DIR, relativePath);
+
+  // Strict boundary check: file must reside within DIST_DIR
+  const relFromDist = path.relative(DIST_DIR, filePath);
+  if (relFromDist.startsWith('..') || path.isAbsolute(relFromDist)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('Forbidden: Access outside build directory is denied');
+    return;
   }
 
-  const ext = path.extname(filePath).toLowerCase();
+  // Fallback to index.html for client-side SPA routing if file does not exist or is a directory
+  let targetPath = filePath;
+  try {
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+      targetPath = path.join(DIST_DIR, 'index.html');
+    }
+  } catch {
+    targetPath = path.join(DIST_DIR, 'index.html');
+  }
+
+  const ext = path.extname(targetPath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-  fs.readFile(filePath, (err, content) => {
+  fs.readFile(targetPath, (err, content) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not Found (run: npm run build:web to generate dist)');
@@ -390,13 +413,12 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, {
         'Content-Type': contentType,
         'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
       });
-      res.end(content, 'utf-8');
+      res.end(content);
     }
   });
 });
-
-const localIp = getLocalIpAddress();
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n==================================================');

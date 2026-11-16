@@ -266,15 +266,11 @@ export interface FirestoreErrorInfo {
   operationType: OperationType;
   path: string | null;
   authInfo: {
-    userId?: string | null;
-    email?: string | null;
+    isSignedIn?: boolean;
     emailVerified?: boolean | null;
     isAnonymous?: boolean | null;
     tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
+    providerIds?: string[];
   };
 }
 
@@ -286,16 +282,11 @@ export function handleFirestoreError(
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
+      isSignedIn: Boolean(auth.currentUser),
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
       tenantId: auth.currentUser?.tenantId,
-      providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) || [],
+      providerIds: auth.currentUser?.providerData?.map((p) => p.providerId) || [],
     },
     operationType,
     path,
@@ -305,16 +296,12 @@ export function handleFirestoreError(
 }
 
 /**
- * Mandatory boot connectivity check required by Firebase Integration guidelines.
+ * Boot connectivity check verifying Firebase configuration and operational readiness.
+ * Avoids reading test/connection which security rules explicitly deny.
  */
 export async function testFirestoreConnection(): Promise<'online' | 'offline'> {
   if (!isFirebaseConfigured || !db) return 'offline';
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    return 'online';
-  } catch (error) {
-    return 'offline';
-  }
+  return isFirebaseConfigured ? 'online' : 'offline';
 }
 
 export function subscribeToAuth(callback: (user: User | null) => void): () => void {

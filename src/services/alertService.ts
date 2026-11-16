@@ -142,11 +142,7 @@ export const alertService: INotificationService = {
     }
 
     // 2. Secondary Channel: HTTP Webhook Endpoint (EXPO_PUBLIC_SOS_FUNCTION_URL)
-    const functionEndpoint =
-      (envObj ? envObj['EXPO_PUBLIC_SOS_FUNCTION_URL'] : undefined) ||
-      (typeof import.meta !== 'undefined' &&
-        (import.meta as unknown as { env?: Record<string, string> }).env?.EXPO_PUBLIC_SOS_FUNCTION_URL) ||
-      '';
+    const functionEndpoint = process.env.EXPO_PUBLIC_SOS_FUNCTION_URL || '';
 
     const apiToken =
       (envObj ? envObj['EXPO_PUBLIC_RAHAT_API_TOKEN'] : undefined) ||

@@ -83,7 +83,7 @@ export const SOSScreen: React.FC<SOSScreenProps> = ({ navigation }) => {
               Coordinates: {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
             </Text>
             <Text style={styles.activeTimeText}>
-              Activated: {activeAlert ? new Date(activeAlert.timestamp).toLocaleTimeString() : 'Just now'}
+              Activated: {activeAlert ? new Date(activeAlert.timestamp || activeAlert.triggeredAt || Date.now()).toLocaleTimeString() : 'Just now'}
             </Text>
 
             {activeAlert?.isOfflineFallback && (

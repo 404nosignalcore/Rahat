@@ -101,6 +101,7 @@ export interface SafeHaven {
 export interface RouteOption {
   id: string;
   name: string;
+  title?: string; // Compatibility alias for name
   nameHi: string;
   originLabel: string;
   destinationLabel: string;
@@ -113,6 +114,7 @@ export interface RouteOption {
   safeHavensEnRoute: number;
   riskZonesCrossed: { name: string; level: RiskLevel }[];
   path: [number, number][];
+  polyline?: { latitude: number; longitude: number }[]; // Compatibility alias
   rationale: string;
   rationaleHi: string;
 }
@@ -153,22 +155,27 @@ export interface SosAlertRecord {
   longitude: number;
   mapShareUrl: string;
   triggeredAt: string;
+  timestamp?: string; // Compatibility alias for triggeredAt
   contactDeliveries: ContactDeliveryStatus[];
   locationSource?: 'gps' | 'fallback_demo';
   isFallbackLocation?: boolean;
+  isOfflineFallback?: boolean; // Compatibility alias
 }
 
-export type JourneyStatus = 'idle' | 'active' | 'paused' | 'completed' | 'sos_escalated';
+export type JourneyStatus = 'idle' | 'active' | 'paused' | 'completed' | 'sos_escalated' | 'deviated' | 'sos_triggered';
 
 export interface JourneySession {
   id: string;
   ownerUid: string;
   originLabel: string;
   destinationLabel: string;
+  destinationName?: string; // Compatibility alias
   routeId: string;
   routeName: string;
   status: JourneyStatus;
   sharedWithCircleId?: string;
+  isSharingWithCircle?: boolean; // Compatibility alias
+  selectedRoute?: RouteOption; // Compatibility alias
   lastLatitude: number;
   lastLongitude: number;
   gpsSignalStatus: 'locked' | 'weak' | 'lost' | 'permission_denied';
@@ -245,8 +252,10 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
+  name?: string; // Compatibility alias
   phone: string;
   photoUrl?: string;
+  photoURL?: string; // Compatibility alias
   preferredLanguage?: 'en' | 'hi';
   role: 'citizen' | 'admin';
   isAuthenticated: boolean;
