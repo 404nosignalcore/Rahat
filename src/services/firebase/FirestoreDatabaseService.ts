@@ -64,40 +64,6 @@ export class FirestoreDatabaseService implements IDatabaseService {
     }
   }
 
-  async createSafetyReport(
-    report: Omit<SafetyReport, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'flagCount'>
-  ): Promise<SafetyReport> {
-    if (!isFirebaseConfigured || !db) {
-      throw new Error('Firestore not initialized.');
-    }
-    const newDocRef = doc(collection(db, 'safety_reports'));
-    const newReport: SafetyReport = {
-      ...report,
-      id: newDocRef.id,
-      createdAt: Date.now(),
-      upvotes: 0,
-      downvotes: 0,
-      flagCount: 0,
-      status: 'unverified',
-    };
-    await setDoc(newDocRef, newReport);
-    return newReport;
-  }
-
-  async voteSafetyReport(reportId: string, direction: 'up' | 'down'): Promise<void> {
-    if (!isFirebaseConfigured || !db) return;
-    const ref = doc(db, 'safety_reports', reportId);
-    if (direction === 'up') {
-      await updateDoc(ref, { upvotes: (arguments[0] as any) });
-    }
-  }
-
-  async flagSafetyReport(reportId: string, _reason: string): Promise<void> {
-    if (!isFirebaseConfigured || !db) return;
-    const ref = doc(db, 'safety_reports', reportId);
-    await updateDoc(ref, { status: 'under_review' });
-  }
-
   async getComments(reportId: string): Promise<CommunityComment[]> {
     if (!isFirebaseConfigured || !db) return [];
     const q = query(

@@ -17,7 +17,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isVerifiedUser() && (
-        request.auth.token.email == 'nullpointbuilds007@gmail.com' ||
+        request.auth.token.admin == true ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
@@ -47,10 +47,10 @@ service cloud.firestore {
     }
 
     function isValidUserPrivateInfo(data) {
-      return data.keys().hasAll(['uid', 'email', 'locationConsent', 'backgroundTrackingConsent', 'notificationConsent', 'sosCountdownSeconds', 'updatedAt'])
+      return data.keys().hasAll(['uid', 'locationConsent', 'backgroundTrackingConsent', 'notificationConsent', 'sosCountdownSeconds', 'updatedAt'])
         && data.keys().hasOnly(['uid', 'email', 'phone', 'locationConsent', 'backgroundTrackingConsent', 'notificationConsent', 'sosCountdownSeconds', 'updatedAt'])
         && isValidId(data.uid)
-        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && (!('email' in data) || (data.email is string && data.email.size() <= 160))
         && (!('phone' in data) || (data.phone is string && data.phone.size() <= 32))
         && data.locationConsent is bool
         && data.backgroundTrackingConsent is bool
@@ -247,15 +247,16 @@ service cloud.firestore {
             && incoming().ownerUid == existing().ownerUid
             && incoming().createdAt == existing().createdAt
             && incoming().updatedAt == request.time
-            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'relationship', 'phone', 'notifyOnSOS', 'verificationStatus', 'updatedAt'])
+            && incoming().verificationStatus == existing().verificationStatus
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'relationship', 'phone', 'notifyOnSOS', 'updatedAt'])
           ));
         allow delete: if isValidId(userId) && isValidId(contactId) && isVerifiedUser() && (request.auth.uid == userId || isAdmin());
       }
     }
 
     match /safety_reports/{reportId} {
-      allow get: if isValidId(reportId);
-      allow list: if resource.data.abuseFlags < 5;
+      allow get: if isValidId(reportId) && isSignedIn();
+      allow list: if isSignedIn() && resource.data.abuseFlags < 5;
       allow create: if isValidId(reportId)
         && isVerifiedUser()
         && isValidSafetyReport(incoming())
@@ -277,16 +278,54 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && (
-            (incoming().diff(existing()).affectedKeys().hasOnly(['corroborationCount', 'updatedAt']) && incoming().corroborationCount == existing().corroborationCount + 1) ||
-            (incoming().diff(existing()).affectedKeys().hasOnly(['outdatedFlags', 'updatedAt']) && incoming().outdatedFlags == existing().outdatedFlags + 1) ||
-            (incoming().diff(existing()).affectedKeys().hasOnly(['abuseFlags', 'updatedAt']) && incoming().abuseFlags == existing().abuseFlags + 1)
+            (incoming().diff(existing()).affectedKeys().hasOnly(['corroborationCount', 'updatedAt']) && existing().authorUid != request.auth.uid && incoming().corroborationCount == existing().corroborationCount + 1) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['outdatedFlags', 'updatedAt']) && incoming().outdatedFlags == existing().outdatedFlags + 1)
           )
         ));
       allow delete: if isValidId(reportId) && isVerifiedUser() && (existing().authorUid == request.auth.uid || isAdmin());
 
+      match /abuse_flags/{flagUserId} {
+        allow get: if isValidId(reportId) && isValidId(flagUserId) && isSignedIn()
+          && (request.auth.uid == flagUserId || isAdmin());
+        allow list: if isValidId(reportId) && isSignedIn()
+          && (resource.data.flaggedByUid == request.auth.uid || isAdmin());
+        allow create: if isValidId(reportId) && isValidId(flagUserId)
+          && isVerifiedUser()
+          && request.auth.uid == flagUserId
+          && incoming().keys().hasAll(['id', 'reportId', 'flaggedByUid', 'reason', 'createdAt'])
+          && incoming().keys().hasOnly(['id', 'reportId', 'flaggedByUid', 'reason', 'createdAt'])
+          && incoming().id == flagUserId
+          && incoming().reportId == reportId
+          && incoming().flaggedByUid == request.auth.uid
+          && incoming().reason is string && incoming().reason.size() <= 200
+          && incoming().createdAt == request.time;
+        allow delete: if isValidId(reportId) && isValidId(flagUserId)
+          && isVerifiedUser()
+          && (request.auth.uid == flagUserId || isAdmin());
+      }
+
+      match /corroborations/{corroboratorUid} {
+        allow get: if isValidId(reportId) && isValidId(corroboratorUid) && isSignedIn();
+        allow list: if isValidId(reportId) && isSignedIn();
+        allow create: if isValidId(reportId) && isValidId(corroboratorUid)
+          && isVerifiedUser()
+          && request.auth.uid == corroboratorUid
+          && exists(/databases/$(database)/documents/safety_reports/$(reportId))
+          && get(/databases/$(database)/documents/safety_reports/$(reportId)).data.authorUid != request.auth.uid
+          && incoming().keys().hasAll(['id', 'reportId', 'corroboratorUid', 'createdAt'])
+          && incoming().keys().hasOnly(['id', 'reportId', 'corroboratorUid', 'createdAt'])
+          && incoming().id == corroboratorUid
+          && incoming().reportId == reportId
+          && incoming().corroboratorUid == request.auth.uid
+          && incoming().createdAt == request.time;
+        allow delete: if isValidId(reportId) && isValidId(corroboratorUid)
+          && isVerifiedUser()
+          && (request.auth.uid == corroboratorUid || isAdmin());
+      }
+
       match /comments/{commentId} {
-        allow get: if isValidId(reportId) && isValidId(commentId);
-        allow list: if isValidId(reportId) && resource.data.flaggedAbuse == false;
+        allow get: if isValidId(reportId) && isValidId(commentId) && isSignedIn();
+        allow list: if isValidId(reportId) && isSignedIn() && resource.data.flaggedAbuse == false;
         allow create: if isValidId(reportId) && isValidId(commentId)
           && isVerifiedUser()
           && isValidCommunityComment(incoming())
@@ -401,6 +440,7 @@ service cloud.firestore {
         && incoming().id == alertId
         && incoming().ownerUid == request.auth.uid
         && incoming().status in ['countdown', 'active']
+        && (incoming().deliveryChannelStatus == 'pending' || isAdmin())
         && incoming().triggeredAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isValidId(alertId)
@@ -413,14 +453,15 @@ service cloud.firestore {
           && incoming().ownerUid == existing().ownerUid
           && incoming().triggeredAt == existing().triggeredAt
           && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'deliveryChannelStatus', 'latitude', 'longitude', 'updatedAt'])
+          && incoming().deliveryChannelStatus == existing().deliveryChannelStatus
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'latitude', 'longitude', 'updatedAt'])
         ));
-      allow delete: if isValidId(alertId) && isVerifiedUser() && isAdmin();
+      allow delete: if isValidId(alertId) && isVerifiedUser() && (existing().ownerUid == request.auth.uid || isAdmin());
     }
 
     match /community_posts/{postId} {
-      allow get: if isValidId(postId);
-      allow list: if resource.data.abuseFlags < 5;
+      allow get: if isValidId(postId) && isSignedIn();
+      allow list: if isSignedIn() && resource.data.abuseFlags < 5;
       allow create: if isValidId(postId)
         && isVerifiedUser()
         && isValidCommunityPost(incoming())

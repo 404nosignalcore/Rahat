@@ -10,6 +10,7 @@ import {
 import { auth, isFirebaseConfigured } from './firebaseConfig';
 import { IAuthService } from '../interfaces/IAuthService';
 import { UserProfile } from '../../types';
+import { ensureUserDocuments } from '../firebaseClient';
 
 export class FirebaseAuthService implements IAuthService {
   private currentUser: UserProfile | null = null;
@@ -50,15 +51,21 @@ export class FirebaseAuthService implements IAuthService {
     email: string,
     pass: string,
     name: string,
-    _phone: string
+    phone: string
   ): Promise<UserProfile> {
     if (!isFirebaseConfigured || !auth) {
       throw new Error('Firebase Auth is not configured.');
     }
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     await firebaseUpdateProfile(cred.user, { displayName: name });
+    try {
+      await ensureUserDocuments(cred.user, 'en', phone);
+    } catch (e) {
+      console.warn('[FirebaseAuthService] ensureUserDocuments error:', e);
+    }
     const profile = this.mapFirebaseUser(cred.user);
     if (!profile) throw new Error('Failed to create user profile.');
+    profile.phone = phone;
     return profile;
   }
 

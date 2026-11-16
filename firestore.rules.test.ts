@@ -20,5 +20,31 @@ describe('Firestore Security Rules', () => {
     expect(rulesContent.includes('resource.data.ownerUid == request.auth.uid')).toBe(true);
     expect(rulesContent.includes('get(/databases/$(database)/documents/safe_circles/$(circleId))')).toBe(true);
     expect(rulesContent.includes('isValidId(')).toBe(true);
+
+    // High: Firestore rules and data integrity validations
+    // 1. Author IDs protected from anonymous visitors (isSignedIn required for safety_reports & community_posts)
+    expect(rulesContent.includes('allow get: if isValidId(reportId) && isSignedIn();')).toBe(true);
+    expect(rulesContent.includes('allow list: if isSignedIn() && resource.data.abuseFlags < 5;')).toBe(true);
+    expect(rulesContent.includes('allow get: if isValidId(postId) && isSignedIn();')).toBe(true);
+
+    // 2. Prevent self-corroboration
+    expect(rulesContent.includes('existing().authorUid != request.auth.uid')).toBe(true);
+
+    // 3. Subcollection abuse flags and corroborations per user
+    expect(rulesContent.includes('match /abuse_flags/{flagUserId}')).toBe(true);
+    expect(rulesContent.includes('match /corroborations/{corroboratorUid}')).toBe(true);
+
+    // 4. Contact verification status is admin-only (client cannot modify)
+    expect(rulesContent.includes('incoming().verificationStatus == existing().verificationStatus')).toBe(true);
+    expect(rulesContent.includes("hasOnly(['name', 'relationship', 'phone', 'notifyOnSOS', 'updatedAt'])")).toBe(true);
+
+    // 5. Alert delivery status cannot be forged by clients
+    expect(rulesContent.includes("incoming().deliveryChannelStatus == 'pending' || isAdmin()")).toBe(true);
+    expect(rulesContent.includes('incoming().deliveryChannelStatus == existing().deliveryChannelStatus')).toBe(true);
+    expect(rulesContent.includes("hasOnly(['status', 'latitude', 'longitude', 'updatedAt'])")).toBe(true);
+
+    // 6. Admin authorization uses custom claims or admin collection, no hardcoded email
+    expect(rulesContent.includes('request.auth.token.admin == true')).toBe(true);
+    expect(!rulesContent.includes('nullpointbuilds007@gmail.com')).toBe(true);
   });
 });

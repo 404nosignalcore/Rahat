@@ -29,6 +29,7 @@ import {
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
   isFirebaseConfigured,
   app as configuredApp,
@@ -77,6 +78,8 @@ class OfflineMockAdapter {
   private circles: SafeCircleGroup[] = [...INITIAL_SAFE_CIRCLES];
   private posts: CommunityPost[] = [...INITIAL_COMMUNITY_POSTS];
   private userProfile = { ...INITIAL_USER_PROFILE };
+  private corroborationsByUser: Map<string, Set<string>> = new Map();
+  private abuseFlagsByUser: Map<string, Set<string>> = new Map();
 
   async fetchSafetyReports(): Promise<IncidentReport[]> {
     return [...this.reports];
@@ -97,6 +100,41 @@ class OfflineMockAdapter {
     if (rep) {
       rep.comments = rep.comments ? [...rep.comments, comment] : [comment];
     }
+  }
+
+  async recordReportCorroborationDoc(reportId: string, userUid: string): Promise<boolean> {
+    const rep = this.reports.find((r) => r.id === reportId);
+    if (!rep) return false;
+    if (rep.authorUid === userUid) {
+      console.warn('[OfflineMockAdapter] Author cannot self-corroborate report.');
+      return false;
+    }
+    let userSet = this.corroborationsByUser.get(reportId);
+    if (!userSet) {
+      userSet = new Set();
+      this.corroborationsByUser.set(reportId, userSet);
+    }
+    if (userSet.has(userUid)) return false;
+    userSet.add(userUid);
+    rep.corroborationCount = userSet.size;
+    if (rep.corroborationCount >= 3 && rep.verificationStatus === 'unverified') {
+      rep.verificationStatus = 'community_corroborated';
+    }
+    return true;
+  }
+
+  async recordReportAbuseFlagDoc(reportId: string, userUid: string, _reason?: string): Promise<boolean> {
+    const rep = this.reports.find((r) => r.id === reportId);
+    if (!rep) return false;
+    let userSet = this.abuseFlagsByUser.get(reportId);
+    if (!userSet) {
+      userSet = new Set();
+      this.abuseFlagsByUser.set(reportId, userSet);
+    }
+    if (userSet.has(userUid)) return false;
+    userSet.add(userUid);
+    rep.abuseFlags = userSet.size;
+    return true;
   }
 
   async incrementReportCounterDoc(
@@ -138,12 +176,16 @@ class OfflineMockAdapter {
     this.userProfile.consents = params.consents;
   }
 
-  async saveEmergencyContactDoc(contact: EmergencyContact): Promise<void> {
+  async saveEmergencyContactDoc(contact: EmergencyContact, isAdmin = false): Promise<void> {
     const idx = this.contacts.findIndex((c) => c.id === contact.id);
     if (idx >= 0) {
-      this.contacts[idx] = { ...contact };
+      const existingStatus = this.contacts[idx].verificationStatus;
+      this.contacts[idx] = {
+        ...contact,
+        verificationStatus: isAdmin ? contact.verificationStatus : existingStatus,
+      };
     } else {
-      this.contacts.push({ ...contact });
+      this.contacts.push({ ...contact, verificationStatus: 'unverified' });
     }
   }
 
@@ -160,12 +202,19 @@ class OfflineMockAdapter {
     }
   }
 
-  async saveEmergencyAlertDoc(alert: SosAlertRecord, _isNew: boolean): Promise<void> {
+  async saveEmergencyAlertDoc(alert: SosAlertRecord, isNew: boolean): Promise<void> {
     const idx = this.alerts.findIndex((a) => a.id === alert.id);
     if (idx >= 0) {
-      this.alerts[idx] = { ...alert };
+      const existingStatus = this.alerts[idx].deliveryChannelStatus;
+      this.alerts[idx] = {
+        ...alert,
+        deliveryChannelStatus: existingStatus,
+      };
     } else {
-      this.alerts.push({ ...alert });
+      this.alerts.push({
+        ...alert,
+        deliveryChannelStatus: isNew ? 'pending' : alert.deliveryChannelStatus,
+      });
     }
   }
 
@@ -182,11 +231,22 @@ class OfflineMockAdapter {
     this.posts.unshift({ ...post });
   }
 
-  async deleteAccountCascade(_uid: string): Promise<void> {
+  async deleteAccountCascade(uid: string): Promise<void> {
     this.contacts = [];
     this.journeys = [];
     this.alerts = [];
-    this.userProfile = { ...INITIAL_USER_PROFILE };
+    this.reports = this.reports.filter((r) => r.authorUid !== uid);
+    this.posts = this.posts.filter((p) => p.authorUid !== uid);
+    this.circles = this.circles.filter((c) => c.ownerUid !== uid);
+    this.comments = this.comments.filter((c) => c.authorUid !== uid);
+    this.userProfile = {
+      ...INITIAL_USER_PROFILE,
+      uid: '',
+      displayName: '',
+      email: '',
+      phone: '',
+      isAuthenticated: false,
+    };
   }
 }
 
@@ -292,7 +352,11 @@ export async function signOutFirebase(): Promise<void> {
   }
 }
 
-export async function ensureUserDocuments(user: User, preferredLanguage: 'en' | 'hi' = 'en') {
+export async function ensureUserDocuments(
+  user: User,
+  preferredLanguage: 'en' | 'hi' = 'en',
+  phone?: string
+) {
   if (!isFirebaseConfigured || !db) return;
   const uid = user.uid;
   const publicPath = `users/${uid}`;
@@ -315,16 +379,22 @@ export async function ensureUserDocuments(user: User, preferredLanguage: 'en' | 
     const privateRef = doc(db, 'users', uid, 'private', 'info');
     const existingPrivate = await getDoc(privateRef);
     if (!existingPrivate.exists()) {
-      await setDoc(privateRef, {
+      const initialPrivateData: Record<string, any> = {
         uid,
-        email: (user.email || 'member@safewalk.org').slice(0, 160),
-        phone: (user.phoneNumber || '').slice(0, 32),
         locationConsent: true,
         backgroundTrackingConsent: false,
         notificationConsent: true,
         sosCountdownSeconds: 5,
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (user.email && user.email.trim() !== '') {
+        initialPrivateData.email = user.email.slice(0, 160);
+      }
+      const effectivePhone = (phone || user.phoneNumber || '').trim();
+      if (effectivePhone) {
+        initialPrivateData.phone = effectivePhone.slice(0, 32);
+      }
+      await setDoc(privateRef, initialPrivateData);
     }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${publicPath} | ${privatePath}`);
@@ -412,9 +482,9 @@ export async function loadUserPrivateAndContacts(uid: string): Promise<{
   return { phone, consents, contacts };
 }
 
-export async function saveEmergencyContactDoc(contact: EmergencyContact): Promise<void> {
+export async function saveEmergencyContactDoc(contact: EmergencyContact, isAdmin = false): Promise<void> {
   if (!isFirebaseConfigured || !db) {
-    await offlineMockAdapter.saveEmergencyContactDoc(contact);
+    await offlineMockAdapter.saveEmergencyContactDoc(contact, isAdmin);
     return;
   }
   const path = `users/${contact.ownerUid}/emergency_contacts/${contact.id}`;
@@ -434,14 +504,17 @@ export async function saveEmergencyContactDoc(contact: EmergencyContact): Promis
         updatedAt: serverTimestamp(),
       });
     } else {
-      await updateDoc(ref, {
+      const updateData: Record<string, any> = {
         name: sanitizeText(contact.name, FIELD_LIMITS.contactName.max),
         relationship: sanitizeText(contact.relationship, 40),
         phone: sanitizeText(contact.phone, FIELD_LIMITS.contactPhone.max),
         notifyOnSOS: contact.notifyOnSOS,
-        verificationStatus: contact.verificationStatus,
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (isAdmin) {
+        updateData.verificationStatus = contact.verificationStatus;
+      }
+      await updateDoc(ref, updateData);
     }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
@@ -613,6 +686,47 @@ export async function saveJourneyDoc(journey: JourneySession, isNew: boolean): P
   }
 }
 
+export async function recordReportCorroborationDoc(reportId: string, userUid: string): Promise<boolean> {
+  if (!isFirebaseConfigured || !db) {
+    return offlineMockAdapter.recordReportCorroborationDoc(reportId, userUid);
+  }
+  const path = `safety_reports/${reportId}/corroborations/${userUid}`;
+  try {
+    await setDoc(doc(db, 'safety_reports', reportId, 'corroborations', userUid), {
+      id: userUid,
+      reportId,
+      corroboratorUid: userUid,
+      createdAt: serverTimestamp(),
+    });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, path);
+  }
+}
+
+export async function recordReportAbuseFlagDoc(
+  reportId: string,
+  userUid: string,
+  reason: string = 'Inappropriate or harmful report'
+): Promise<boolean> {
+  if (!isFirebaseConfigured || !db) {
+    return offlineMockAdapter.recordReportAbuseFlagDoc(reportId, userUid, reason);
+  }
+  const path = `safety_reports/${reportId}/abuse_flags/${userUid}`;
+  try {
+    await setDoc(doc(db, 'safety_reports', reportId, 'abuse_flags', userUid), {
+      id: userUid,
+      reportId,
+      flaggedByUid: userUid,
+      reason: sanitizeText(reason, 200),
+      createdAt: serverTimestamp(),
+    });
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, path);
+  }
+}
+
 export async function saveEmergencyAlertDoc(alert: SosAlertRecord, isNew: boolean): Promise<void> {
   if (!isFirebaseConfigured || !db) {
     await offlineMockAdapter.saveEmergencyAlertDoc(alert, isNew);
@@ -625,7 +739,7 @@ export async function saveEmergencyAlertDoc(alert: SosAlertRecord, isNew: boolea
         id: alert.id,
         ownerUid: alert.ownerUid,
         status: alert.status,
-        deliveryChannelStatus: alert.deliveryChannelStatus,
+        deliveryChannelStatus: 'pending', // Initial unforgeable status; gateway/Admin SDK updates confirmed delivery
         latitude: alert.latitude,
         longitude: alert.longitude,
         mapShareUrl: alert.mapShareUrl.slice(0, 300),
@@ -633,9 +747,9 @@ export async function saveEmergencyAlertDoc(alert: SosAlertRecord, isNew: boolea
         updatedAt: serverTimestamp(),
       });
     } else {
+      // Client updates can only update operational alert status and coordinates
       await updateDoc(doc(db, 'emergency_alerts', alert.id), {
         status: alert.status,
-        deliveryChannelStatus: alert.deliveryChannelStatus,
         latitude: alert.latitude,
         longitude: alert.longitude,
         updatedAt: serverTimestamp(),
@@ -695,13 +809,71 @@ export async function deleteAccountCascade(uid: string): Promise<void> {
     await offlineMockAdapter.deleteAccountCascade(uid);
     return;
   }
+
+  // 1. If Firebase app is configured, attempt comprehensive server-side cascade via Cloud Function
+  if (configuredApp) {
+    try {
+      const functions = getFunctions(configuredApp);
+      const deleteCallable = httpsCallable(functions, 'deleteUserAccountCascade');
+      await deleteCallable();
+      return;
+    } catch (callableErr) {
+      console.warn('[firebaseClient] deleteUserAccountCascade callable fallback to client cascade:', callableErr);
+    }
+  }
+
+  // 2. Client-side fallback compliant with India DPDP Act:
+  // Cascade delete all personal data authored by or linked to uid across all collections
   try {
+    // Delete emergency contacts
     const contactsSnap = await getDocs(
       query(collection(db, 'users', uid, 'emergency_contacts'), where('ownerUid', '==', uid))
     );
     for (const c of contactsSnap.docs) {
       await deleteDoc(c.ref);
     }
+
+    // Delete user journeys
+    const journeysSnap = await getDocs(
+      query(collection(db, 'journeys'), where('ownerUid', '==', uid))
+    );
+    for (const j of journeysSnap.docs) {
+      await deleteDoc(j.ref);
+    }
+
+    // Delete user emergency alerts
+    const alertsSnap = await getDocs(
+      query(collection(db, 'emergency_alerts'), where('ownerUid', '==', uid))
+    );
+    for (const a of alertsSnap.docs) {
+      await deleteDoc(a.ref);
+    }
+
+    // Delete safe circles
+    const circlesSnap = await getDocs(
+      query(collection(db, 'safe_circles'), where('ownerUid', '==', uid))
+    );
+    for (const s of circlesSnap.docs) {
+      await deleteDoc(s.ref);
+    }
+
+    // Delete safety reports authored by user
+    const reportsSnap = await getDocs(
+      query(collection(db, 'safety_reports'), where('authorUid', '==', uid))
+    );
+    for (const r of reportsSnap.docs) {
+      await deleteDoc(r.ref);
+    }
+
+    // Delete community posts authored by user
+    const postsSnap = await getDocs(
+      query(collection(db, 'community_posts'), where('authorUid', '==', uid))
+    );
+    for (const p of postsSnap.docs) {
+      await deleteDoc(p.ref);
+    }
+
+    // Delete private info and public profile
     await deleteDoc(doc(db, 'users', uid, 'private', 'info'));
     await deleteDoc(doc(db, 'users', uid));
 

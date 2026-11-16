@@ -29,6 +29,7 @@ import { ResponderDashboardModal } from '../components/sos/ResponderDashboardMod
 
 export const SosScreen: React.FC = () => {
   const {
+    user,
     themeMode,
     currentLocation,
     refreshLocation,
@@ -548,7 +549,9 @@ export const SosScreen: React.FC = () => {
                         pressed && styles.pressed,
                       ]}
                     >
-                      <Text style={styles.verifyBtnText}>Verify Number</Text>
+                      <Text style={styles.verifyBtnText}>
+                        {user.role === 'admin' ? 'Verify (Admin)' : 'Verify Number'}
+                      </Text>
                     </Pressable>
                   )}
 

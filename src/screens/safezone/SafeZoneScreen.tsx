@@ -21,6 +21,12 @@ import { useLocation } from '../../context/LocationContext';
 import { useAuth } from '../../context/AuthContext';
 import { dbService } from '../../services/ServiceFactory';
 import {
+  createSafetyReportDoc,
+  recordReportCorroborationDoc,
+  recordReportAbuseFlagDoc,
+} from '../../services/firebaseClient';
+import { IncidentReport } from '../../types/safety';
+import {
   SafetyZone,
   SafetyReport,
   ReportCategory,
@@ -110,16 +116,28 @@ export const SafeZoneScreen: React.FC<SafeZoneScreenProps> = ({ navigation }) =>
 
     setIsSubmitting(true);
     try {
-      await dbService.createSafetyReport({
-        userId: user ? user.uid : 'anon_user',
-        authorName: user ? user.name : 'Anonymous Reporter',
-        category: newCategory,
+      const authorUid = user ? user.uid : 'anon_user';
+      const newReport: IncidentReport = {
+        id: 'rep_' + Date.now(),
+        authorUid,
+        category: (newCategory as any) || 'poor_lighting',
         title: newTitle.trim(),
         description: newDescription.trim(),
-        coordinates: location,
-        locationName: 'Near current location',
-        status: 'unverified', // Transparent: starts as unverified community report
-      });
+        address: 'Near current location',
+        latitude: location.latitude,
+        longitude: location.longitude,
+        severity: 3,
+        verificationStatus: 'unverified',
+        corroborationCount: 0,
+        outdatedFlags: 0,
+        abuseFlags: 0,
+        isSynthetic: false,
+        timestamp: new Date().toISOString(),
+        timeHour: new Date().getHours(),
+        lightingCondition: 'dim',
+        comments: [],
+      };
+      await createSafetyReportDoc(newReport, authorUid);
 
       setIsReportModalVisible(false);
       setNewTitle('');
@@ -136,9 +154,11 @@ export const SafeZoneScreen: React.FC<SafeZoneScreenProps> = ({ navigation }) =>
     }
   };
 
-  const handleVote = async (reportId: string, direction: 'up' | 'down') => {
-    await dbService.voteSafetyReport(reportId, direction);
-    await loadData();
+  const handleVote = async (reportId: string, _direction: 'up' | 'down') => {
+    if (user?.uid) {
+      await recordReportCorroborationDoc(reportId, user.uid);
+      await loadData();
+    }
   };
 
   const handleFlag = (reportId: string) => {
@@ -151,7 +171,9 @@ export const SafeZoneScreen: React.FC<SafeZoneScreenProps> = ({ navigation }) =>
           text: 'Flag for Review',
           style: 'destructive',
           onPress: async () => {
-            await dbService.flagSafetyReport(reportId, 'user_flagged');
+            if (user?.uid) {
+              await recordReportAbuseFlagDoc(reportId, user.uid);
+            }
             await loadData();
             Alert.alert('Thank You', 'This report has been flagged for moderation review.');
           },

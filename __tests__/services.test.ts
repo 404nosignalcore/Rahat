@@ -14,6 +14,11 @@ import {
   createSafetyReportDoc,
   saveEmergencyContactDoc,
   loadUserPrivateAndContacts,
+  recordReportCorroborationDoc,
+  recordReportAbuseFlagDoc,
+  saveEmergencyAlertDoc,
+  deleteAccountCascade,
+  offlineMockAdapter,
 } from '../src/services/firebaseClient';
 
 describe('SafeWalk Core Services & State Workflows', () => {
@@ -334,6 +339,230 @@ describe('SafeWalk Core Services & State Workflows', () => {
       const foundContact = userData.contacts.find((c) => c.id === 'contact-mock-1');
       expect(foundContact).toBeDefined();
       expect(foundContact?.name).toBe('Kavita');
+    });
+
+    test('recordReportCorroborationDoc prevents self-corroboration and multiple corroborations by same account', async () => {
+      const repId = `rep-corroborate-${Date.now()}`;
+      await createSafetyReportDoc(
+        {
+          id: repId,
+          authorUid: 'author-alice',
+          category: 'poor_lighting',
+          title: 'Author Self-Corroboration Guard',
+          description: 'Testing that authors cannot corroborate their own report',
+          address: 'Connaught Place',
+          latitude: 28.6315,
+          longitude: 77.2167,
+          severity: 2,
+          verificationStatus: 'unverified',
+          corroborationCount: 0,
+          outdatedFlags: 0,
+          abuseFlags: 0,
+          isSynthetic: false,
+          timestamp: new Date().toISOString(),
+          timeHour: 22,
+          lightingCondition: 'dim',
+          comments: [],
+        },
+        'author-alice'
+      );
+
+      // Author attempting self-corroboration must be rejected
+      const authorAttempt = await recordReportCorroborationDoc(repId, 'author-alice');
+      expect(authorAttempt).toBe(false);
+
+      // Independent user Bob corroborating
+      const bobAttempt1 = await recordReportCorroborationDoc(repId, 'user-bob');
+      expect(bobAttempt1).toBe(true);
+
+      // Bob corroborating again (must not increment count twice)
+      const bobAttempt2 = await recordReportCorroborationDoc(repId, 'user-bob');
+      expect(bobAttempt2).toBe(false);
+
+      const reports = await fetchSafetyReports();
+      const target = reports.find((r) => r.id === repId);
+      expect(target?.corroborationCount).toBe(1);
+    });
+
+    test('recordReportAbuseFlagDoc prevents a single account from spamming abuse flags to hide reports', async () => {
+      const repId = `rep-flag-${Date.now()}`;
+      await createSafetyReportDoc(
+        {
+          id: repId,
+          authorUid: 'author-victim',
+          category: 'harassment',
+          title: 'Abuse Flag Spam Guard Test',
+          description: 'Testing that one account cannot increment abuseFlags repeatedly',
+          address: 'Janpath',
+          latitude: 28.62,
+          longitude: 77.21,
+          severity: 3,
+          verificationStatus: 'unverified',
+          corroborationCount: 0,
+          outdatedFlags: 0,
+          abuseFlags: 0,
+          isSynthetic: false,
+          timestamp: new Date().toISOString(),
+          timeHour: 22,
+          lightingCondition: 'dim',
+          comments: [],
+        },
+        'author-victim'
+      );
+
+      // Attacker flags report first time
+      const flag1 = await recordReportAbuseFlagDoc(repId, 'attacker-user-1');
+      expect(flag1).toBe(true);
+
+      // Attacker tries flagging again 4 more times
+      await recordReportAbuseFlagDoc(repId, 'attacker-user-1');
+      await recordReportAbuseFlagDoc(repId, 'attacker-user-1');
+      await recordReportAbuseFlagDoc(repId, 'attacker-user-1');
+      await recordReportAbuseFlagDoc(repId, 'attacker-user-1');
+
+      const reports = await fetchSafetyReports();
+      const target = reports.find((r) => r.id === repId);
+      expect(target?.abuseFlags).toBe(1); // strictly 1, attacker cannot spam to reach 5
+    });
+
+    test('saveEmergencyContactDoc preserves verificationStatus when updated by non-admin user', async () => {
+      const contactId = `contact-verify-${Date.now()}`;
+      await saveEmergencyContactDoc({
+        id: contactId,
+        ownerUid: 'user-regular',
+        name: 'Papa',
+        relationship: 'Father',
+        phone: '+919876543210',
+        verificationStatus: 'unverified',
+        notifyOnSOS: true,
+      });
+
+      // Regular user tries to update verificationStatus to verified without admin privileges
+      await saveEmergencyContactDoc(
+        {
+          id: contactId,
+          ownerUid: 'user-regular',
+          name: 'Papa (Updated)',
+          relationship: 'Father',
+          phone: '+919876543210',
+          verificationStatus: 'verified',
+          notifyOnSOS: true,
+        },
+        false // isAdmin = false
+      );
+
+      const data = await loadUserPrivateAndContacts('user-regular');
+      const contact = data.contacts.find((c) => c.id === contactId);
+      expect(contact?.name).toBe('Papa (Updated)');
+      expect(contact?.verificationStatus).toBe('unverified'); // Unchanged!
+
+      // Admin verification can legitimately verify
+      await saveEmergencyContactDoc(
+        {
+          id: contactId,
+          ownerUid: 'user-regular',
+          name: 'Papa (Updated)',
+          relationship: 'Father',
+          phone: '+919876543210',
+          verificationStatus: 'verified',
+          notifyOnSOS: true,
+        },
+        true // isAdmin = true
+      );
+
+      const adminData = await loadUserPrivateAndContacts('user-regular');
+      const verifiedContact = adminData.contacts.find((c) => c.id === contactId);
+      expect(verifiedContact?.verificationStatus).toBe('verified');
+    });
+
+    test('saveEmergencyAlertDoc enforces pending status on creation and prevents clients from forging deliveryChannelStatus', async () => {
+      const alertId = `alert-secure-${Date.now()}`;
+      await saveEmergencyAlertDoc(
+        {
+          id: alertId,
+          ownerUid: 'user-test',
+          status: 'active',
+          deliveryChannelStatus: 'sent' as any, // Client tries to claim sent on creation
+          latitude: 28.6139,
+          longitude: 77.209,
+          mapShareUrl: 'https://maps.google.com',
+          triggeredAt: new Date().toISOString(),
+          contactDeliveries: [],
+        },
+        true // isNew
+      );
+
+      // Verify that offline adapter / Firestore initialization enforced 'pending'
+      const activeAlerts = (offlineMockAdapter as any).alerts as any[];
+      const alertDoc = activeAlerts.find((a) => a.id === alertId);
+      expect(alertDoc?.deliveryChannelStatus).toBe('pending');
+
+      // Client updates coordinates, tries to tamper deliveryChannelStatus
+      await saveEmergencyAlertDoc(
+        {
+          id: alertId,
+          ownerUid: 'user-test',
+          status: 'active',
+          deliveryChannelStatus: 'sent' as any, // Tamper attempt
+          latitude: 28.6145,
+          longitude: 77.2095,
+          mapShareUrl: 'https://maps.google.com',
+          triggeredAt: new Date().toISOString(),
+          contactDeliveries: [],
+        },
+        false // update
+      );
+
+      const updatedAlertDoc = activeAlerts.find((a) => a.id === alertId);
+      expect(updatedAlertDoc?.deliveryChannelStatus).toBe('pending');
+      expect(updatedAlertDoc?.latitude).toBe(28.6145);
+    });
+
+    test('deleteAccountCascade purges all personal data across reports, posts, comments, contacts and journeys under DPDP Act', async () => {
+      const dpdpUid = `user-dpdp-${Date.now()}`;
+      await createSafetyReportDoc(
+        {
+          id: `rep-dpdp-${Date.now()}`,
+          authorUid: dpdpUid,
+          category: 'poor_lighting',
+          title: 'DPDP User Report',
+          description: 'This report should be deleted with cascade',
+          address: 'Delhi',
+          latitude: 28.6,
+          longitude: 77.2,
+          severity: 1,
+          verificationStatus: 'unverified',
+          corroborationCount: 0,
+          outdatedFlags: 0,
+          abuseFlags: 0,
+          isSynthetic: false,
+          timestamp: new Date().toISOString(),
+          timeHour: 10,
+          lightingCondition: 'dim',
+          comments: [],
+        },
+        dpdpUid
+      );
+
+      await saveEmergencyContactDoc({
+        id: `contact-dpdp-${Date.now()}`,
+        ownerUid: dpdpUid,
+        name: 'Brother',
+        relationship: 'Brother',
+        phone: '+919999911111',
+        verificationStatus: 'unverified',
+        notifyOnSOS: true,
+      });
+
+      // Execute cascade deletion
+      await deleteAccountCascade(dpdpUid);
+
+      const reports = await fetchSafetyReports();
+      const orphanedReport = reports.find((r) => r.authorUid === dpdpUid);
+      expect(orphanedReport).toBeUndefined();
+
+      const contactsData = await loadUserPrivateAndContacts(dpdpUid);
+      expect(contactsData.contacts.length).toBe(0);
     });
   });
 });

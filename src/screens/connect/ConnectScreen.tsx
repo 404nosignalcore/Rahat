@@ -21,6 +21,11 @@ import { useLocation } from '../../context/LocationContext';
 import { useAuth } from '../../context/AuthContext';
 import { dbService } from '../../services/ServiceFactory';
 import {
+  createCommunityPostDoc,
+  recordReportCorroborationDoc,
+} from '../../services/firebaseClient';
+import { CommunityPost } from '../../types/safety';
+import {
   SafeCircle,
   NearbyHelpItem,
   SafetyReport,
@@ -104,20 +109,20 @@ export const ConnectScreen: React.FC<ConnectScreenProps> = ({ navigation }) => {
     if (!newPostContent.trim()) return;
     setIsPosting(true);
     try {
-      await dbService.createSafetyReport({
-        userId: user ? user.uid : 'anon',
-        authorName: user ? user.name : 'Community Member',
-        category: 'other',
-        title: 'Community Update',
-        description: newPostContent.trim(),
-        // Privacy rule: Never expose precise private coordinates in public posts by default
-        coordinates: {
-          latitude: Number(location.latitude.toFixed(3)),
-          longitude: Number(location.longitude.toFixed(3)),
-        },
-        locationName: 'Local Neighborhood Corridor',
-        status: 'unverified',
-      });
+      const authorUid = user ? user.uid : 'anon';
+      const post: CommunityPost = {
+        id: 'post_' + Date.now(),
+        authorUid,
+        authorDisplay: user ? user.name : 'Community Member',
+        coarseArea: 'Local Neighborhood Corridor',
+        topic: 'safe_tip',
+        body: newPostContent.trim(),
+        helpfulCount: 0,
+        abuseFlags: 0,
+        createdAt: new Date().toISOString(),
+        comments: [],
+      };
+      await createCommunityPostDoc(post);
       setNewPostContent('');
       const updated = await dbService.getSafetyReports();
       setCommunityPosts(updated);
@@ -452,7 +457,13 @@ export const ConnectScreen: React.FC<ConnectScreenProps> = ({ navigation }) => {
                   <View style={styles.postStats}>
                     <TouchableOpacity
                       style={styles.statBtn}
-                      onPress={() => dbService.voteSafetyReport(post.id, 'up')}
+                      onPress={async () => {
+                        if (user?.uid) {
+                          await recordReportCorroborationDoc(post.id, user.uid);
+                          const updated = await dbService.getSafetyReports();
+                          setCommunityPosts(updated);
+                        }
+                      }}
                     >
                       <MaterialCommunityIcons name="thumb-up-outline" size={16} color={Colors.primary} />
                       <Text style={styles.statBtnText}>{post.upvotes} Helpful</Text>

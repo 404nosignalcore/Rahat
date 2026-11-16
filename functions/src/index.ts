@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 
 admin.initializeApp();
 
@@ -123,10 +123,11 @@ export const dispatchSosAlert = onCall(async (request) => {
 
 /**
  * Automatically transitions report verification status from 'unverified' to 'community_corroborated'
- * once corroborated by >= 3 independent reports without flagging as authorized.
+ * once corroborated by >= 3 independent verified community members without self-corroboration.
+ * Counts unique corroborators from the 'corroborations' subcollection server-side.
  */
 export const onReportCorroboration = onDocumentCreated(
-  'safety_reports/{reportId}/comments/{commentId}',
+  'safety_reports/{reportId}/corroborations/{corroboratorUid}',
   async (event) => {
     const reportId = event.params.reportId;
     const reportRef = db.collection('safety_reports').doc(reportId);
@@ -134,11 +135,129 @@ export const onReportCorroboration = onDocumentCreated(
     if (!snap.exists) return;
 
     const data = snap.data();
-    if (data && data.verificationStatus === 'unverified' && Number(data.corroborationCount ?? 0) >= 3) {
-      await reportRef.update({
-        verificationStatus: 'community_corroborated',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+    const corroborationsSnap = await reportRef.collection('corroborations').get();
+    const count = corroborationsSnap.size;
+
+    const updates: Record<string, any> = {
+      corroborationCount: count,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (data && data.verificationStatus === 'unverified' && count >= 3) {
+      updates.verificationStatus = 'community_corroborated';
     }
+
+    await reportRef.update(updates);
   }
 );
+
+/**
+ * Server-side abuse flag aggregation:
+ * Counts unique abuse flags stored per-user in the 'abuse_flags' subcollection.
+ * Prevents a single malicious account from artificially inflating abuseFlags to hide reports.
+ */
+export const onReportAbuseFlagCreated = onDocumentCreated(
+  'safety_reports/{reportId}/abuse_flags/{flagUserId}',
+  async (event) => {
+    const reportId = event.params.reportId;
+    const reportRef = db.collection('safety_reports').doc(reportId);
+    const snap = await reportRef.get();
+    if (!snap.exists) return;
+
+    const flagsSnap = await reportRef.collection('abuse_flags').get();
+    await reportRef.update({
+      abuseFlags: flagsSnap.size,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+);
+
+export const onReportAbuseFlagDeleted = onDocumentDeleted(
+  'safety_reports/{reportId}/abuse_flags/{flagUserId}',
+  async (event) => {
+    const reportId = event.params.reportId;
+    const reportRef = db.collection('safety_reports').doc(reportId);
+    const snap = await reportRef.get();
+    if (!snap.exists) return;
+
+    const flagsSnap = await reportRef.collection('abuse_flags').get();
+    await reportRef.update({
+      abuseFlags: flagsSnap.size,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+);
+
+/**
+ * Fully deletes all user personal data across all Firestore collections and removes the auth account
+ * in compliance with India's Digital Personal Data Protection (DPDP) Act.
+ * Uses Admin SDK to prevent partial deletions and avoid client-side requires-recent-login errors.
+ */
+export const deleteUserAccountCascade = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Authentication required for account deletion.');
+  }
+
+  const uid = request.auth.uid;
+
+  // 1. Delete emergency contacts
+  const contactsSnap = await db.collection('users').doc(uid).collection('emergency_contacts').get();
+  for (const doc of contactsSnap.docs) {
+    await doc.ref.delete();
+  }
+
+  // 2. Delete private info and public profile
+  await db.collection('users').doc(uid).collection('private').doc('info').delete().catch(() => {});
+  await db.collection('users').doc(uid).delete().catch(() => {});
+
+  // 3. Delete user journeys
+  const journeysSnap = await db.collection('journeys').where('ownerUid', '==', uid).get();
+  for (const doc of journeysSnap.docs) {
+    await doc.ref.delete();
+  }
+
+  // 4. Delete user emergency alerts
+  const alertsSnap = await db.collection('emergency_alerts').where('ownerUid', '==', uid).get();
+  for (const doc of alertsSnap.docs) {
+    await doc.ref.delete();
+  }
+
+  // 5. Delete safe circles owned by user
+  const circlesSnap = await db.collection('safe_circles').where('ownerUid', '==', uid).get();
+  for (const doc of circlesSnap.docs) {
+    const membersSnap = await doc.ref.collection('members').get();
+    for (const m of membersSnap.docs) {
+      await m.ref.delete();
+    }
+    await doc.ref.delete();
+  }
+
+  // 6. Delete safety reports authored by user
+  const reportsSnap = await db.collection('safety_reports').where('authorUid', '==', uid).get();
+  for (const doc of reportsSnap.docs) {
+    const commentsSnap = await doc.ref.collection('comments').get();
+    for (const c of commentsSnap.docs) {
+      await c.ref.delete();
+    }
+    const flagsSnap = await doc.ref.collection('abuse_flags').get();
+    for (const f of flagsSnap.docs) {
+      await f.ref.delete();
+    }
+    const corrsSnap = await doc.ref.collection('corroborations').get();
+    for (const cr of corrsSnap.docs) {
+      await cr.ref.delete();
+    }
+    await doc.ref.delete();
+  }
+
+  // 7. Delete community posts authored by user
+  const postsSnap = await db.collection('community_posts').where('authorUid', '==', uid).get();
+  for (const doc of postsSnap.docs) {
+    await doc.ref.delete();
+  }
+
+  // 8. Delete user from Firebase Auth
+  await admin.auth().deleteUser(uid);
+
+  return { success: true };
+});

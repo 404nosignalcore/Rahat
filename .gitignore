@@ -13,4 +13,5 @@ npm-debug.*
 web-build/
 .DS_Store
 coverage/
+functions/lib/
 

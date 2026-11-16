@@ -15,11 +15,11 @@ export interface IDatabaseService {
   // Safe Zones
   getSafetyZones(nearbyLocation?: LatLng): Promise<SafetyZone[]>;
 
-  // Safety Reports
+  // Safety Reports (legacy optional, active path is createSafetyReportDoc in firebaseClient)
   getSafetyReports(categoryFilter?: string): Promise<SafetyReport[]>;
-  createSafetyReport(report: Omit<SafetyReport, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'flagCount'>): Promise<SafetyReport>;
-  voteSafetyReport(reportId: string, direction: 'up' | 'down'): Promise<void>;
-  flagSafetyReport(reportId: string, reason: string): Promise<void>;
+  createSafetyReport?(report: Omit<SafetyReport, 'id' | 'createdAt' | 'upvotes' | 'downvotes' | 'flagCount'>): Promise<SafetyReport>;
+  voteSafetyReport?(reportId: string, direction: 'up' | 'down'): Promise<void>;
+  flagSafetyReport?(reportId: string, reason: string): Promise<void>;
 
   // Comments
   getComments(reportId: string): Promise<CommunityComment[]>;

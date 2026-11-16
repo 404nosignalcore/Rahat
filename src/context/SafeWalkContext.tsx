@@ -69,6 +69,8 @@ import {
   fetchSafetyReports,
   incrementReportCounterDoc,
   loadUserPrivateAndContacts,
+  recordReportAbuseFlagDoc,
+  recordReportCorroborationDoc,
   saveEmergencyAlertDoc,
   saveEmergencyContactDoc,
   saveJourneyDoc,
@@ -485,30 +487,42 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         await createSafetyReportDoc(newReport, user.uid);
       } catch (err) {
-        console.warn('Firestore report write failed:', err);
+        console.error('Firestore report write failed:', err);
+        setReports((prev) => prev.filter((r) => r.id !== id));
+        const errorMessage = err instanceof Error ? err.message : 'Failed to publish incident report to cloud database.';
+        return { ok: false, error: errorMessage };
       }
     }
     return { ok: true };
   };
 
   const corroborateReport = async (reportId: string) => {
-    let nextCount = 1;
+    const target = reports.find((r) => r.id === reportId);
+    if (!target) return;
+    if (target.authorUid === user.uid) {
+      Alert.alert('Cannot Self-Corroborate', 'You cannot corroborate an incident report that you authored.');
+      return;
+    }
+
+    const nextCount = target.corroborationCount + 1;
+    const nextStatus: ReportVerificationStatus =
+      target.verificationStatus === 'authorized_verified'
+        ? 'authorized_verified'
+        : nextCount >= 3
+        ? 'community_corroborated'
+        : 'under_review';
+
     setReports((prev) =>
-      prev.map((r) => {
-        if (r.id !== reportId) return r;
-        nextCount = r.corroborationCount + 1;
-        const nextStatus: ReportVerificationStatus =
-          r.verificationStatus === 'authorized_verified'
-            ? 'authorized_verified'
-            : nextCount >= 3
-            ? 'community_corroborated'
-            : 'under_review';
-        return { ...r, corroborationCount: nextCount, verificationStatus: nextStatus };
-      })
+      prev.map((r) =>
+        r.id === reportId
+          ? { ...r, corroborationCount: nextCount, verificationStatus: nextStatus }
+          : r
+      )
     );
+
     if (user.isAuthenticated) {
       try {
-        await incrementReportCounterDoc(reportId, 'corroborationCount', nextCount);
+        await recordReportCorroborationDoc(reportId, user.uid);
       } catch (err) {
         console.warn('Corroborate update skipped:', err);
       }
@@ -516,23 +530,27 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const flagReport = async (reportId: string, kind: 'outdated' | 'abuse') => {
-    let nextCount = 1;
+    const target = reports.find((r) => r.id === reportId);
+    if (!target) return;
+    const nextCount = (kind === 'outdated' ? target.outdatedFlags : target.abuseFlags) + 1;
+
     setReports((prev) =>
-      prev.map((r) => {
-        if (r.id !== reportId) return r;
-        nextCount = (kind === 'outdated' ? r.outdatedFlags : r.abuseFlags) + 1;
-        return kind === 'outdated'
-          ? { ...r, outdatedFlags: nextCount }
-          : { ...r, abuseFlags: nextCount };
-      })
+      prev.map((r) =>
+        r.id === reportId
+          ? kind === 'outdated'
+            ? { ...r, outdatedFlags: nextCount }
+            : { ...r, abuseFlags: nextCount }
+          : r
+      )
     );
+
     if (user.isAuthenticated) {
       try {
-        await incrementReportCounterDoc(
-          reportId,
-          kind === 'outdated' ? 'outdatedFlags' : 'abuseFlags',
-          nextCount
-        );
+        if (kind === 'abuse') {
+          await recordReportAbuseFlagDoc(reportId, user.uid);
+        } else {
+          await incrementReportCounterDoc(reportId, 'outdatedFlags', nextCount);
+        }
       } catch (err) {
         console.warn('Flag update skipped:', err);
       }
@@ -782,18 +800,27 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const verifyContact = async (contactId: string) => {
-    let target: EmergencyContact | undefined;
+    if (user.role !== 'admin') {
+      Alert.alert(
+        'Admin Verification Required',
+        'Emergency contact phone numbers can only be verified via official SMS OTP verification or administrative dispatch review.'
+      );
+      return;
+    }
+    const target = contacts.find((c) => c.id === contactId);
+    if (!target) return;
+    const updatedContact: EmergencyContact = { ...target, verificationStatus: 'verified' };
+
     setContacts((prev) =>
-      prev.map((c) => {
-        if (c.id !== contactId) return c;
-        target = { ...c, verificationStatus: 'verified' };
-        return target;
-      })
+      prev.map((c) => (c.id === contactId ? updatedContact : c))
     );
-    if (user.isAuthenticated && target) {
+
+    if (user.isAuthenticated) {
       try {
-        await saveEmergencyContactDoc(target);
-      } catch {}
+        await saveEmergencyContactDoc(updatedContact, true);
+      } catch (err) {
+        console.warn('Contact verification write failed:', err);
+      }
     }
   };
 
