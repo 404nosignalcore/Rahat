@@ -10,6 +10,7 @@ export interface SafetyMapViewProps {
   routes?: RouteOption[];
   selectedRouteId?: string;
   userLocation?: { lat: number; lng: number };
+  centerLocation?: { lat: number; lng: number };
   onSelectZone?: (zone: RiskZone) => void;
   onSelectReport?: (report: IncidentReport) => void;
   onSelectRoute?: (route: RouteOption) => void;
@@ -40,6 +41,7 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
     routes = [],
     selectedRouteId,
     userLocation = { lat: 28.6295, lng: 77.224 },
+    centerLocation,
     onSelectZone,
     onSelectReport,
     onSelectRoute,
@@ -104,7 +106,9 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
     const L = typeof window !== 'undefined' ? (window as any).L : null;
     if (!L || !leafletReady || !containerRef.current || mapRef.current) return;
 
-    const initialCenter = userLocation
+    const initialCenter = centerLocation
+      ? [centerLocation.lat, centerLocation.lng]
+      : userLocation
       ? [userLocation.lat, userLocation.lng]
       : [28.6295, 77.224];
 
@@ -176,6 +180,16 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = (props) => {
     newGoogleLayer.bringToBack();
     tileLayerRef.current = newGoogleLayer;
   }, [mapType]);
+
+  // Dynamic Map Panning when centerLocation changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const target = centerLocation || userLocation;
+    if (target) {
+      map.setView([target.lat, target.lng], 16, { animate: true });
+    }
+  }, [centerLocation?.lat, centerLocation?.lng]);
 
   // Click & Coordinate Picker Listener
   useEffect(() => {

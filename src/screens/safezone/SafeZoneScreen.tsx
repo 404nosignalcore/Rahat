@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import {
   SafetyReport,
   ReportCategory,
   CommunityComment,
+  LatLng,
 } from '../../types';
 
 interface SafeZoneScreenProps {
@@ -40,6 +41,7 @@ export const SafeZoneScreen: React.FC<SafeZoneScreenProps> = ({ navigation }) =>
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedZone, setSelectedZone] = useState<SafetyZone | null>(null);
+  const [mapCenter, setMapCenter] = useState<LatLng | null>(null);
 
   // New Report Modal State
   const [isReportModalVisible, setIsReportModalVisible] = useState<boolean>(false);
@@ -56,6 +58,39 @@ export const SafeZoneScreen: React.FC<SafeZoneScreenProps> = ({ navigation }) =>
   useEffect(() => {
     loadData();
   }, [selectedCategory]);
+
+  const filteredReports = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return reports.filter((r) => {
+      const matchesCat = selectedCategory === 'all' || r.category === selectedCategory;
+      const matchesQ =
+        !q ||
+        r.title.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        r.locationName.toLowerCase().includes(q);
+      return matchesCat && matchesQ;
+    });
+  }, [reports, selectedCategory, searchQuery]);
+
+  const matchingZones = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return zones;
+    return zones.filter(
+      (z) =>
+        z.name.toLowerCase().includes(q) ||
+        z.summary.toLowerCase().includes(q)
+    );
+  }, [zones, searchQuery]);
+
+  const handleSelectSearchedZone = (zone: SafetyZone) => {
+    setSelectedZone(zone);
+    setMapCenter(zone.center);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setMapCenter(null);
+  };
 
   const loadData = async () => {
     const fetchedZones = await dbService.getSafetyZones(location);
@@ -170,17 +205,149 @@ export const SafeZoneScreen: React.FC<SafeZoneScreenProps> = ({ navigation }) =>
             placeholderTextColor={Colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onSubmitEditing={() => {
+              if (matchingZones.length > 0) {
+                handleSelectSearchedZone(matchingZones[0]);
+              } else if (filteredReports.length > 0) {
+                setMapCenter(filteredReports[0].coordinates);
+              }
+            }}
+            returnKeyType="search"
             style={styles.searchInput}
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={handleClearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <MaterialCommunityIcons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
         </View>
+
+        {/* Search Autocomplete / Suggestions Overlay */}
+        {searchQuery.trim().length > 0 && (
+          <View style={styles.searchSuggestionsCard}>
+            <View style={styles.searchSuggestionsHeader}>
+              <Text style={styles.searchSuggestionsTitle}>
+                {matchingZones.length + filteredReports.length > 0
+                  ? `Search Results (${matchingZones.length} zones, ${filteredReports.length} reports)`
+                  : 'No Matching Results'}
+              </Text>
+              <TouchableOpacity onPress={handleClearSearch}>
+                <Text style={styles.searchClearText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+
+            {matchingZones.map((z) => (
+              <TouchableOpacity
+                key={z.id}
+                style={styles.searchResultRow}
+                onPress={() => handleSelectSearchedZone(z)}
+              >
+                <View
+                  style={[
+                    styles.searchResultIcon,
+                    {
+                      backgroundColor:
+                        z.level === 'green'
+                          ? '#DCFCE7'
+                          : z.level === 'yellow'
+                          ? '#FEF3C7'
+                          : '#FEE2E2',
+                    },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="shield-outline"
+                    size={16}
+                    color={
+                      z.level === 'green'
+                        ? Colors.green
+                        : z.level === 'yellow'
+                        ? Colors.yellow
+                        : Colors.red
+                    }
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.searchResultName}>{z.name}</Text>
+                  <Text style={styles.searchResultSub}>
+                    Safety Score: {z.safetyScore}/100 · {z.level.toUpperCase()} ZONE
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+
+            {filteredReports.slice(0, 3).map((r) => (
+              <TouchableOpacity
+                key={r.id}
+                style={styles.searchResultRow}
+                onPress={() => {
+                  setMapCenter(r.coordinates);
+                  openComments(r);
+                }}
+              >
+                <View style={[styles.searchResultIcon, { backgroundColor: '#F3F4F6' }]}>
+                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color={Colors.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.searchResultName}>{r.title}</Text>
+                  <Text style={styles.searchResultSub}>{r.locationName} · {r.category}</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Quick Search Area Shortcuts */}
+        {!searchQuery && zones.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickSearchRow}
+          >
+            {zones.map((z) => (
+              <TouchableOpacity
+                key={z.id}
+                style={[
+                  styles.quickSearchChip,
+                  selectedZone?.id === z.id && styles.quickSearchChipActive,
+                ]}
+                onPress={() => handleSelectSearchedZone(z)}
+              >
+                <MaterialCommunityIcons
+                  name="map-marker-radius-outline"
+                  size={14}
+                  color={selectedZone?.id === z.id ? '#FFF' : Colors.primary}
+                />
+                <Text
+                  style={[
+                    styles.quickSearchChipText,
+                    selectedZone?.id === z.id && styles.quickSearchChipTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {z.name.split('&')[0].trim()}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
 
         {/* Interactive Map */}
         <SafeMapView
           currentLocation={location}
-          zones={zones}
-          reports={reports}
-          onSelectZone={(z) => setSelectedZone(z)}
-          onSelectReport={(r) => openComments(r)}
+          centerLocation={mapCenter || location}
+          zones={matchingZones.length > 0 ? matchingZones : zones}
+          reports={filteredReports}
+          onSelectZone={(z) => {
+            setSelectedZone(z);
+            setMapCenter(z.center);
+          }}
+          onSelectReport={(r) => {
+            openComments(r);
+            setMapCenter(r.coordinates);
+          }}
           height={260}
         />
 
@@ -285,14 +452,20 @@ export const SafeZoneScreen: React.FC<SafeZoneScreenProps> = ({ navigation }) =>
 
         {/* Reports Feed */}
         <View style={styles.reportsList}>
-          {reports.length === 0 ? (
+          {filteredReports.length === 0 ? (
             <Card style={styles.emptyCard}>
               <MaterialCommunityIcons name="shield-check" size={36} color={Colors.green} />
-              <Text style={styles.emptyTitle}>No Safety Concerns Reported</Text>
-              <Text style={styles.emptySubtitle}>There are currently no active reports in this category nearby.</Text>
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? 'No Matching Reports Found' : 'No Safety Concerns Reported'}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery
+                  ? `No reports found matching "${searchQuery}". Try clearing search or checking another category.`
+                  : 'There are currently no active reports in this category nearby.'}
+              </Text>
             </Card>
           ) : (
-            reports.map((rep) => (
+            filteredReports.map((rep) => (
               <Card key={rep.id} style={styles.reportCard}>
                 <View style={styles.reportHeader}>
                   <View style={{ flex: 1 }}>
@@ -485,6 +658,87 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: Typography.fontSize.body,
     color: Colors.text,
+  },
+  searchSuggestionsCard: {
+    backgroundColor: Colors.card,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+    marginTop: -Spacing.md,
+  },
+  searchSuggestionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderSubtle,
+  },
+  searchSuggestionsTitle: {
+    fontSize: Typography.fontSize.caption,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  searchClearText: {
+    fontSize: Typography.fontSize.caption,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  searchResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.sm,
+  },
+  searchResultIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchResultName: {
+    fontSize: Typography.fontSize.footnote,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  searchResultSub: {
+    fontSize: Typography.fontSize.caption,
+    color: Colors.textMuted,
+  },
+  quickSearchRow: {
+    gap: Spacing.xs,
+    marginTop: -Spacing.md,
+    paddingBottom: 2,
+  },
+  quickSearchChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceSubtle,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 4,
+  },
+  quickSearchChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  quickSearchChipText: {
+    fontSize: Typography.fontSize.caption,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  quickSearchChipTextActive: {
+    color: '#FFF',
   },
   zoneCard: {
     gap: Spacing.sm,

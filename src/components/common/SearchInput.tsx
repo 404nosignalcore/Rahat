@@ -8,6 +8,12 @@ export interface SearchInputProps {
   onChangeText: (text: string) => void;
   placeholder?: string;
   onClear?: () => void;
+  onSubmitEditing?: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  returnKeyType?: 'done' | 'go' | 'next' | 'search' | 'send';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  autoCorrect?: boolean;
   style?: ViewStyle;
   inputStyle?: TextStyle;
   accessibilityLabel?: string;
@@ -18,6 +24,12 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   onChangeText,
   placeholder = 'Search...',
   onClear,
+  onSubmitEditing,
+  onFocus,
+  onBlur,
+  returnKeyType = 'search',
+  autoCapitalize = 'none',
+  autoCorrect = false,
   style,
   inputStyle,
   accessibilityLabel = 'Search',
@@ -33,6 +45,12 @@ export const SearchInput: React.FC<SearchInputProps> = ({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={Colors.inkMuted48}
+        onSubmitEditing={onSubmitEditing}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        returnKeyType={returnKeyType}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
         style={[styles.input, inputStyle]}
       />
       {value.length > 0 && onClear ? (

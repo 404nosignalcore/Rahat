@@ -37,6 +37,7 @@ export interface SafetyMapViewProps {
   routes?: RouteOption[];
   selectedRouteId?: string;
   userLocation?: { lat: number; lng: number };
+  centerLocation?: { lat: number; lng: number };
   onSelectZone?: (zone: RiskZone) => void;
   onSelectReport?: (report: IncidentReport) => void;
   onSelectRoute?: (route: RouteOption) => void;
@@ -60,6 +61,7 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
   routes = [],
   selectedRouteId,
   userLocation = { lat: 28.6295, lng: 77.224 },
+  centerLocation,
   onSelectZone,
   onSelectReport,
   onSelectRoute,
@@ -73,7 +75,8 @@ export const SafetyMapView: React.FC<SafetyMapViewProps> = ({
 
   const zoomScale = ZOOM_STEPS[zoomIndex];
   const selectedRoute = routes.find((r) => r.id === selectedRouteId);
-  const centerTile = latLngToTile(userLocation.lat, userLocation.lng, 15);
+  const activeCenter = centerLocation || userLocation;
+  const centerTile = latLngToTile(activeCenter.lat, activeCenter.lng, 15);
   const lyrs = GOOGLE_MAP_LYRS[mapType];
 
   const handleZoomIn = () => {

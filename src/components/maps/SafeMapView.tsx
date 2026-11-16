@@ -31,6 +31,7 @@ function latLngToTile(lat: number, lng: number, zoom: number) {
 
 interface SafeMapViewProps {
   currentLocation: LatLng;
+  centerLocation?: LatLng;
   zones?: SafetyZone[];
   reports?: SafetyReport[];
   helpPoints?: NearbyHelpItem[];
@@ -46,6 +47,7 @@ const ZOOM_STEPS = [1.0, 1.35, 1.75, 2.2];
 
 export const SafeMapView: React.FC<SafeMapViewProps> = ({
   currentLocation,
+  centerLocation,
   zones = [],
   reports = [],
   helpPoints = [],
@@ -62,7 +64,8 @@ export const SafeMapView: React.FC<SafeMapViewProps> = ({
   const [tilesLoaded, setTilesLoaded] = useState<boolean>(true);
 
   const zoomScale = ZOOM_STEPS[zoomIndex];
-  const centerTile = latLngToTile(currentLocation.latitude, currentLocation.longitude, 15);
+  const activeCenter = centerLocation || currentLocation;
+  const centerTile = latLngToTile(activeCenter.latitude, activeCenter.longitude, 15);
   const lyrs = GOOGLE_MAP_LYRS[mapType];
 
   const handleZoomIn = () => {

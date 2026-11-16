@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeWalk } from '../context/SafeWalkContext';
 import { getTranslation } from '../i18n/translations';
-import { IncidentCategory, RiskLevel } from '../types/safety';
+import { IncidentCategory, RiskLevel, RiskZone, SafeHaven, IncidentReport } from '../types/safety';
 import { validateSafetyReportInput } from '../utils/validation';
 import { SafetyMapView } from '../components/map/SafetyMapView';
 import { AppIcon } from '../components/ui/AppIcon';
@@ -64,6 +64,8 @@ export const SafeZoneScreen: React.FC = () => {
   const isDark = themeMode === 'dark';
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
   const [pickMode, setPickMode] = useState(false);
   const [pickedCoords, setPickedCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -78,6 +80,30 @@ export const SafeZoneScreen: React.FC = () => {
 
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState('');
+
+  const matchingZones = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return zones;
+    return zones.filter((z) => {
+      const matchName = z.name.toLowerCase().includes(q);
+      const matchHi = z.nameHi ? z.nameHi.toLowerCase().includes(q) : false;
+      const matchConcerns = z.primaryConcerns.some((c) => c.toLowerCase().includes(q));
+      const matchFactors = z.positiveFactors.some((f) => f.toLowerCase().includes(q));
+      return matchName || matchHi || matchConcerns || matchFactors;
+    });
+  }, [zones, searchQuery]);
+
+  const matchingHavens = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return safeHavens;
+    return safeHavens.filter((h) => {
+      const matchName = h.name.toLowerCase().includes(q);
+      const matchHi = h.nameHi ? h.nameHi.toLowerCase().includes(q) : false;
+      const matchAddr = h.address.toLowerCase().includes(q);
+      const matchType = h.type.toLowerCase().includes(q);
+      return matchName || matchHi || matchAddr || matchType;
+    });
+  }, [safeHavens, searchQuery]);
 
   const filteredReports = useMemo(() => {
     return reports.filter((r) => {
@@ -97,6 +123,50 @@ export const SafeZoneScreen: React.FC = () => {
     if (!selectedZone) return zones[0];
     return zones.find((z) => z.id === selectedZone.id) || zones[0];
   }, [selectedZone, zones]);
+
+  const handleSelectZone = (zone: RiskZone) => {
+    setSelectedZone(zone);
+    setMapCenter({ lat: zone.center[0], lng: zone.center[1] });
+    setSearchFocused(false);
+  };
+
+  const handleSelectHaven = (haven: SafeHaven) => {
+    setMapCenter({ lat: haven.latitude, lng: haven.longitude });
+    const closest = zones.reduce(
+      (best, z) => {
+        const dist = Math.hypot(z.center[0] - haven.latitude, z.center[1] - haven.longitude);
+        return dist < best.dist ? { zone: z, dist } : best;
+      },
+      { zone: zones[0], dist: Infinity }
+    );
+    if (closest.zone) {
+      setSelectedZone(closest.zone);
+    }
+    setSearchFocused(false);
+  };
+
+  const handleSelectReport = (rep: IncidentReport) => {
+    setMapCenter({ lat: rep.latitude, lng: rep.longitude });
+    setExpandedReportId(rep.id);
+    setSearchFocused(false);
+  };
+
+  const handleSearchSubmit = () => {
+    setSearchFocused(false);
+    if (matchingZones.length > 0) {
+      handleSelectZone(matchingZones[0]);
+    } else if (matchingHavens.length > 0) {
+      handleSelectHaven(matchingHavens[0]);
+    } else if (filteredReports.length > 0) {
+      handleSelectReport(filteredReports[0]);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setMapCenter(null);
+    setSearchFocused(false);
+  };
 
   const riskBadgeColors = (level: RiskLevel) => {
     if (level === 'safe') {
@@ -287,15 +357,336 @@ export const SafeZoneScreen: React.FC = () => {
           {/* Apple Pill Search Input */}
           <SearchInput
             value={searchQuery}
-            onChangeText={setSearchQuery}
-            onClear={() => setSearchQuery('')}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              if (!text.trim()) {
+                setMapCenter(null);
+              }
+            }}
+            onClear={handleClearSearch}
+            onSubmitEditing={handleSearchSubmit}
+            onFocus={() => setSearchFocused(true)}
+            returnKeyType="search"
             placeholder={
               language === 'hi'
-                ? 'क्षेत्र या सुरक्षा रिपोर्ट खोजें...'
-                : 'Search area, street, or safety report...'
+                ? 'क्षेत्र, मेट्रो स्टेशन, या रिपोर्ट खोजें...'
+                : 'Search area, metro station, haven, or report...'
             }
             style={styles.searchBar}
           />
+
+          {/* Dynamic Search Results & Suggestions Panel */}
+          {searchQuery.trim().length > 0 && (
+            <View
+              style={[
+                styles.searchResultsCard,
+                {
+                  backgroundColor: isDark ? '#1c1c1e' : Colors.canvas,
+                  borderColor: isDark ? '#272729' : Colors.hairline,
+                },
+              ]}
+            >
+              {/* Header with Result Counts & Clear button */}
+              <View style={styles.searchResultsHeader}>
+                <View style={styles.searchCountRow}>
+                  <AppIcon name="search" size={14} color={Colors.primary} />
+                  <Text
+                    style={[
+                      styles.searchCountText,
+                      { color: isDark ? '#ffffff' : Colors.ink },
+                    ]}
+                  >
+                    {language === 'hi'
+                      ? `"${searchQuery}" के परिणाम (${matchingZones.length} क्षेत्र, ${matchingHavens.length} स्थल, ${filteredReports.length} रिपोर्ट)`
+                      : `Results for "${searchQuery}" (${matchingZones.length} zones, ${matchingHavens.length} havens, ${filteredReports.length} reports)`}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleClearSearch}
+                  style={({ pressed }) => [styles.clearSearchBtn, pressed && styles.pressed]}
+                >
+                  <Text style={styles.clearSearchText}>
+                    {language === 'hi' ? 'हटाएं' : 'Clear'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* 1. Matching Safety Zones */}
+              {matchingZones.length > 0 && (
+                <View style={styles.resultCategoryGroup}>
+                  <Text style={styles.resultCategoryTitle}>
+                    {language === 'hi' ? 'सुरक्षा क्षेत्र (SAFETY ZONES)' : 'SAFETY ZONES & CORRIDORS'}
+                  </Text>
+                  {matchingZones.map((zone) => {
+                    const palette = riskBadgeColors(zone.level);
+                    const isSelected = activeZone.id === zone.id;
+                    return (
+                      <Pressable
+                        key={zone.id}
+                        onPress={() => handleSelectZone(zone)}
+                        style={({ pressed }) => [
+                          styles.searchResultItem,
+                          isSelected && styles.searchResultItemActive,
+                          {
+                            backgroundColor: isSelected
+                              ? isDark
+                                ? '#2c2c2e'
+                                : '#f0f7ff'
+                              : 'transparent',
+                          },
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.resultIconWrap,
+                            { backgroundColor: palette.bg, borderColor: palette.border },
+                          ]}
+                        >
+                          <AppIcon name="shield" size={14} color={palette.fg} />
+                        </View>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text
+                            style={[
+                              styles.resultItemTitle,
+                              { color: isDark ? '#ffffff' : Colors.ink },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {language === 'hi' ? zone.nameHi || zone.name : zone.name}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.resultItemSub,
+                              { color: isDark ? Colors.bodyMuted : Colors.inkMuted80 },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {zone.primaryConcerns[0] || zone.positiveFactors[0]}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.resultScoreCapsule,
+                            { backgroundColor: palette.bg, borderColor: palette.border },
+                          ]}
+                        >
+                          <Text style={[styles.resultScoreText, { color: palette.fg }]}>
+                            {zone.safetyScore}/100
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* 2. Matching Safe Havens / Stations */}
+              {matchingHavens.length > 0 && (
+                <View style={styles.resultCategoryGroup}>
+                  <Text style={styles.resultCategoryTitle}>
+                    {language === 'hi' ? 'सुरक्षित स्थल व बूथ (SAFE HAVENS)' : 'VERIFIED SAFE HAVENS & BOOTHS'}
+                  </Text>
+                  {matchingHavens.slice(0, 4).map((haven) => (
+                    <Pressable
+                      key={haven.id}
+                      onPress={() => handleSelectHaven(haven)}
+                      style={({ pressed }) => [
+                        styles.searchResultItem,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.resultIconWrap,
+                          {
+                            backgroundColor:
+                              haven.type === 'police'
+                                ? '#E0F2FE'
+                                : haven.type === 'hospital'
+                                ? '#FEE2E2'
+                                : haven.type === 'metro_booth'
+                                ? '#EDE9FE'
+                                : '#DCFCE7',
+                            borderColor: Colors.hairline,
+                          },
+                        ]}
+                      >
+                        <AppIcon
+                          name={haven.type === 'police' ? 'shield' : 'pin'}
+                          size={14}
+                          color={Colors.primary}
+                        />
+                      </View>
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text
+                          style={[
+                            styles.resultItemTitle,
+                            { color: isDark ? '#ffffff' : Colors.ink },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {language === 'hi' ? haven.nameHi || haven.name : haven.name}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.resultItemSub,
+                            { color: isDark ? Colors.bodyMuted : Colors.inkMuted80 },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {haven.address} · {haven.open24Hours ? '24/7 Active' : 'Operating Hours'}
+                        </Text>
+                      </View>
+                      <View style={styles.havenTagPill}>
+                        <Text style={styles.havenTagText}>
+                          {haven.type.replace('_', ' ').toUpperCase()}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              {/* 3. Matching Incident Reports */}
+              {filteredReports.length > 0 && (
+                <View style={styles.resultCategoryGroup}>
+                  <Text style={styles.resultCategoryTitle}>
+                    {language === 'hi' ? 'सामुदायिक रिपोर्ट (INCIDENTS)' : 'COMMUNITY REPORTS'}
+                  </Text>
+                  {filteredReports.slice(0, 3).map((rep) => (
+                    <Pressable
+                      key={rep.id}
+                      onPress={() => handleSelectReport(rep)}
+                      style={({ pressed }) => [
+                        styles.searchResultItem,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.resultIconWrap,
+                          {
+                            backgroundColor: rep.severity >= 4 ? '#FEE2E2' : '#FEF3C7',
+                            borderColor: Colors.hairline,
+                          },
+                        ]}
+                      >
+                        <AppIcon
+                          name="flag"
+                          size={13}
+                          color={rep.severity >= 4 ? Colors.red : Colors.yellow}
+                        />
+                      </View>
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text
+                          style={[
+                            styles.resultItemTitle,
+                            { color: isDark ? '#ffffff' : Colors.ink },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {rep.title}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.resultItemSub,
+                            { color: isDark ? Colors.bodyMuted : Colors.inkMuted80 },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {rep.address} · {rep.category.replace('_', ' ')}
+                        </Text>
+                      </View>
+                      <View style={styles.reportSeverityPill}>
+                        <Text style={styles.reportSeverityText}>
+                          Sev {rep.severity}/5
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              {/* Empty Search Results Notice */}
+              {matchingZones.length === 0 &&
+                matchingHavens.length === 0 &&
+                filteredReports.length === 0 && (
+                  <View style={styles.noResultsBox}>
+                    <AppIcon name="search" size={24} color={Colors.inkMuted48} />
+                    <Text
+                      style={[
+                        styles.noResultsTitle,
+                        { color: isDark ? '#ffffff' : Colors.ink },
+                      ]}
+                    >
+                      {language === 'hi' ? 'कोई परिणाम नहीं मिला' : 'No matches found'}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.noResultsSub,
+                        { color: isDark ? Colors.bodyMuted : Colors.inkMuted80 },
+                      ]}
+                    >
+                      {language === 'hi'
+                        ? `"${searchQuery}" से मेल खाने वाला कोई क्षेत्र या रिपोर्ट नहीं मिली।`
+                        : `No zones, safe havens, or reports match "${searchQuery}".`}
+                    </Text>
+                  </View>
+                )}
+            </View>
+          )}
+
+          {/* Quick-Jump Location Chips (Visible when not actively searching) */}
+          {!searchQuery && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickLocationsScroll}
+            >
+              {zones.map((zone) => {
+                const isSelected = activeZone.id === zone.id;
+                return (
+                  <Pressable
+                    key={zone.id}
+                    onPress={() => handleSelectZone(zone)}
+                    style={({ pressed }) => [
+                      styles.quickLocationChip,
+                      {
+                        backgroundColor: isSelected
+                          ? Colors.primary
+                          : isDark
+                          ? '#272729'
+                          : Colors.canvasParchment,
+                        borderColor: isSelected
+                          ? Colors.primary
+                          : isDark
+                          ? '#38383a'
+                          : Colors.hairline,
+                      },
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <AppIcon
+                      name="pin"
+                      size={12}
+                      color={isSelected ? '#ffffff' : Colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.quickLocationChipText,
+                        { color: isSelected ? '#ffffff' : isDark ? '#ffffff' : Colors.ink },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {zone.name.split('&')[0].trim()}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
 
           {/* Precision Time-of-Day Chips & Category Filters */}
           <View style={styles.filterSection}>
@@ -513,18 +904,60 @@ export const SafeZoneScreen: React.FC = () => {
             </View>
           )}
 
+          {/* Map Focus Status Pill when navigated to a specific area */}
+          {mapCenter && (
+            <View
+              style={[
+                styles.mapFocusBar,
+                {
+                  backgroundColor: isDark ? '#1c1c1e' : Colors.canvas,
+                  borderColor: isDark ? '#272729' : Colors.hairline,
+                },
+              ]}
+            >
+              <View style={styles.mapFocusLeft}>
+                <AppIcon name="pin" size={14} color={Colors.primary} />
+                <Text
+                  style={[
+                    styles.mapFocusText,
+                    { color: isDark ? '#ffffff' : Colors.ink },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {language === 'hi' ? 'मानचित्र दृश्य: ' : 'Map viewing: '}
+                  <Text style={{ fontWeight: '700' }}>
+                    {language === 'hi' ? activeZone.nameHi || activeZone.name : activeZone.name}
+                  </Text>
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setMapCenter(null);
+                }}
+                style={({ pressed }) => [styles.recenterBtn, pressed && styles.pressed]}
+              >
+                <AppIcon name="route" size={12} color={Colors.primary} />
+                <Text style={styles.recenterBtnText}>
+                  {language === 'hi' ? 'मेरा स्थान' : 'My Location'}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
           {/* MAP CANVAS — Single system drop-shadow resting on surface */}
           <View style={[styles.mapWrapper, Shadows.product]}>
             <SafetyMapView
               height={isWide ? 440 : 300}
-              zones={zones}
+              zones={matchingZones.length > 0 ? matchingZones : zones}
               reports={filteredReports}
-              safeHavens={safeHavens}
+              safeHavens={matchingHavens.length > 0 ? matchingHavens : safeHavens}
               userLocation={
                 pickedCoords || { lat: currentLocation.lat, lng: currentLocation.lng }
               }
-              onSelectZone={setSelectedZone}
-              onSelectReport={(rep) => setExpandedReportId(rep.id)}
+              centerLocation={mapCenter || undefined}
+              onSelectZone={handleSelectZone}
+              onSelectReport={handleSelectReport}
               pickMode={pickMode}
               onPickCoordinate={(lat, lng) => {
                 setPickedCoords({ lat, lng });
@@ -952,6 +1385,195 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     marginBottom: 16,
+  },
+  // Search Results & Dynamic Suggestions
+  searchResultsCard: {
+    borderRadius: BorderRadius.lg, // 18px
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+    ...Shadows.product,
+  },
+  searchResultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.hairline,
+  },
+  searchCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  searchCountText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  clearSearchBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: BorderRadius.pill,
+  },
+  clearSearchText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  resultCategoryGroup: {
+    gap: 6,
+  },
+  resultCategoryTitle: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.inkMuted48,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: BorderRadius.md,
+    gap: 10,
+  },
+  searchResultItemActive: {
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  resultIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultItemTitle: {
+    fontFamily: TypographyStyles.bodyStrong.fontFamily,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  resultItemSub: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 12,
+  },
+  resultScoreCapsule: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+  },
+  resultScoreText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  havenTagPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: '#F3F4F6',
+  },
+  havenTagText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.inkMuted80,
+  },
+  reportSeverityPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: '#FEF3C7',
+  },
+  reportSeverityText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.yellowText,
+  },
+  noResultsBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 6,
+  },
+  noResultsTitle: {
+    fontFamily: TypographyStyles.tagline.fontFamily,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  noResultsSub: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
+  quickLocationsScroll: {
+    gap: 8,
+    marginBottom: 16,
+    paddingVertical: 2,
+  },
+  quickLocationChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+  },
+  quickLocationChipText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  mapFocusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 8,
+  },
+  mapFocusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    flex: 1,
+  },
+  mapFocusText: {
+    fontFamily: TypographyStyles.caption.fontFamily,
+    fontSize: 13,
+    flex: 1,
+  },
+  recenterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: '#E0F2FE',
+  },
+  recenterBtnText: {
+    fontFamily: TypographyStyles.captionStrong.fontFamily,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   filterSection: {
     gap: 10,
