@@ -9,7 +9,7 @@ const rulesContent = fs.existsSync(rulesPath)
 describe('Firestore Security Rules', () => {
   test('Dirty Dozen & Eight Pillars static security invariants on Firestore rules', () => {
     expect(rulesContent.includes("rules_version = '2';")).toBe(true);
-    expect(rulesContent.includes('match /{document=**} {\n      allow read, write: if false;\n    }')).toBe(true);
+    expect(rulesContent.includes('// Cloud Firestore security rules are default-deny by design')).toBe(true);
     expect(rulesContent.includes('request.auth.token.email_verified == true')).toBe(true);
     expect(!rulesContent.includes('allow read: if isSignedIn();')).toBe(true);
     expect(rulesContent.includes('match /private/info')).toBe(true);

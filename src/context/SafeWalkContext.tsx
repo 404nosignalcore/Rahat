@@ -255,6 +255,11 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     deviationMeters: 0,
     startedAt: new Date().toISOString(),
   });
+  const journeyRef = useRef<JourneySession>(journey);
+  useEffect(() => {
+    journeyRef.current = journey;
+  }, [journey]);
+  const lastJourneySyncRef = useRef<number>(0);
 
   const deviationStateRef = useRef<DeviationTrackerState>({
     consecutiveOffRouteCount: 0,
@@ -605,14 +610,29 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
     deviationStateRef.current = evalResult.nextState;
     setDeviationAlertVisible(evalResult.shouldPromptUser);
-    setJourney((prev) => ({
-      ...prev,
+    const updatedJourney: JourneySession = {
+      ...journeyRef.current,
       lastLatitude: lat,
       lastLongitude: lng,
       gpsSignalStatus: accuracyMeters > 80 ? 'weak' : 'locked',
       deviationDetected: evalResult.shouldPromptUser,
       deviationMeters: evalResult.distanceMeters,
-    }));
+    };
+    journeyRef.current = updatedJourney;
+    setJourney(updatedJourney);
+
+    const now = Date.now();
+    // Throttle Firestore journey doc writes during active journey (at most once every 6 seconds) so live share reflects true position
+    if (
+      user.isAuthenticated &&
+      journeyRef.current.status === 'active' &&
+      now - lastJourneySyncRef.current > 6000
+    ) {
+      lastJourneySyncRef.current = now;
+      saveJourneyDoc(updatedJourney, false).catch((err) =>
+        console.warn('[SafeWalk] Live journey Firestore sync skipped:', err)
+      );
+    }
   };
 
   const startJourney = async () => {
@@ -628,6 +648,10 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setDeviationAlertVisible(false);
 
+    // Journey start coordinates reflect user's real GPS position rather than preset route template origin
+    const startLat = typeof currentLocation.lat === 'number' ? currentLocation.lat : selectedRoute.path[0][0];
+    const startLng = typeof currentLocation.lng === 'number' ? currentLocation.lng : selectedRoute.path[0][1];
+
     const newJourney: JourneySession = {
       id: `jrn-${Date.now()}`,
       ownerUid: user.uid,
@@ -637,14 +661,15 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       routeName: selectedRoute.name,
       status: 'active',
       sharedWithCircleId: safeCircles[0]?.sharingEnabled ? safeCircles[0].id : undefined,
-      lastLatitude: selectedRoute.path[0][0],
-      lastLongitude: selectedRoute.path[0][1],
+      lastLatitude: startLat,
+      lastLongitude: startLng,
       gpsSignalStatus: 'locked',
       networkOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
       deviationDetected: false,
       deviationMeters: 0,
       startedAt: new Date().toISOString(),
     };
+    journeyRef.current = newJourney;
     setJourney(newJourney);
 
     watchStopRef.current?.();

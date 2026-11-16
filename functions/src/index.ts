@@ -16,10 +16,18 @@ interface ContactDeliveryResult {
 /**
  * Dispatches an emergency alert to verified contacts via configured messaging provider
  * (FCM / SMS webhook). Never fabricates delivery success when gateway secrets are missing.
+ * Enforces rate limiting, rejects anonymous accounts, validates alert document ownership,
+ * and executes contact webhook deliveries in parallel with strict request timeouts.
  */
 export const dispatchSosAlert = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Authentication required to dispatch SOS.');
+  }
+
+  // 1. Guard against anonymous exploration accounts triggering cloud SMS broadcasts
+  const authProvider = request.auth.token.firebase?.sign_in_provider || (request.auth.token as any).provider_id;
+  if (authProvider === 'anonymous') {
+    throw new HttpsError('permission-denied', 'Anonymous exploration accounts cannot trigger cloud emergency SMS broadcasts.');
   }
 
   const uid = request.auth.uid;
@@ -36,6 +44,35 @@ export const dispatchSosAlert = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'Valid alertId and coordinates are required.');
   }
 
+  // 2. Validate alert ownership to ensure an attacker cannot modify another victim's alert
+  const alertRef = db.collection('emergency_alerts').doc(alertId);
+  const existingAlert = await alertRef.get();
+  if (existingAlert.exists) {
+    const existingData = existingAlert.data();
+    if (existingData?.ownerUid && existingData.ownerUid !== uid) {
+      throw new HttpsError('permission-denied', 'Cannot modify an emergency alert belonging to another user.');
+    }
+  }
+
+  // 3. Rate limiting: enforce 30s cooldown between SOS broadcasts per user
+  const recentAlertsSnap = await db
+    .collection('emergency_alerts')
+    .where('ownerUid', '==', uid)
+    .get();
+
+  const now = Date.now();
+  const RATE_LIMIT_COOLDOWN_MS = 30_000; // 30 seconds
+  for (const doc of recentAlertsSnap.docs) {
+    if (doc.id === alertId) continue;
+    const alertData = doc.data();
+    const triggeredAt = alertData.triggeredAt;
+    const triggeredMs = triggeredAt?.toMillis ? triggeredAt.toMillis() : (triggeredAt ? new Date(triggeredAt).getTime() : 0);
+    if (triggeredMs && (now - triggeredMs) < RATE_LIMIT_COOLDOWN_MS) {
+      const waitSeconds = Math.ceil((RATE_LIMIT_COOLDOWN_MS - (now - triggeredMs)) / 1000);
+      throw new HttpsError('resource-exhausted', `SOS rate limit exceeded. Please wait ${waitSeconds}s before dispatching another alert.`);
+    }
+  }
+
   const isFallback = Boolean(isFallbackLocation || locationSource === 'fallback_demo');
   const warningPrefix = isFallback ? '[CRITICAL WARNING: GPS UNAVAILABLE - UNVERIFIED LOCATION]\n' : '';
 
@@ -47,50 +84,58 @@ export const dispatchSosAlert = onCall(async (request) => {
     .get();
 
   const smsWebhookUrl = process.env.SOS_SMS_WEBHOOK_URL;
-  const results: ContactDeliveryResult[] = [];
 
-  for (const docSnap of contactsSnap.docs) {
-    const contact = docSnap.data();
-    if (!smsWebhookUrl) {
-      results.push({
-        contactId: docSnap.id,
-        contactName: String(contact.name ?? 'Contact'),
-        status: 'unconfigured',
-        reason: 'SMS gateway webhook not configured; client should prompt native SMS/call fallback.',
-      });
-      continue;
-    }
+  // 4. Parallel dispatch with 6-second timeout per contact
+  const results: ContactDeliveryResult[] = await Promise.all(
+    contactsSnap.docs.map(async (docSnap): Promise<ContactDeliveryResult> => {
+      const contact = docSnap.data();
+      if (!smsWebhookUrl) {
+        return {
+          contactId: docSnap.id,
+          contactName: String(contact.name ?? 'Contact'),
+          status: 'unconfigured',
+          reason: 'SMS gateway webhook not configured; client should prompt native SMS/call fallback.',
+        };
+      }
 
-    try {
-      const response = await fetch(smsWebhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: contact.phone,
-          message: `${warningPrefix}RAHAT SafeWalk SOS Alert: Check location immediately: ${mapShareUrl}`,
-          latitude,
-          longitude,
-          alertId,
-          isFallbackLocation: isFallback,
-          locationSource: isFallback ? 'fallback_demo' : 'gps',
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-      results.push({
-        contactId: docSnap.id,
-        contactName: String(contact.name ?? 'Contact'),
-        status: response.ok ? 'sent' : 'failed',
-        reason: response.ok ? undefined : `Gateway HTTP ${response.status}`,
-      });
-    } catch (err) {
-      results.push({
-        contactId: docSnap.id,
-        contactName: String(contact.name ?? 'Contact'),
-        status: 'failed',
-        reason: err instanceof Error ? err.message : 'Network error',
-      });
-    }
-  }
+      try {
+        const response = await fetch(smsWebhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: contact.phone,
+            message: `${warningPrefix}RAHAT SafeWalk SOS Alert: Check location immediately: ${mapShareUrl}`,
+            latitude,
+            longitude,
+            alertId,
+            isFallbackLocation: isFallback,
+            locationSource: isFallback ? 'fallback_demo' : 'gps',
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        return {
+          contactId: docSnap.id,
+          contactName: String(contact.name ?? 'Contact'),
+          status: response.ok ? 'sent' : 'failed',
+          reason: response.ok ? undefined : `Gateway HTTP ${response.status}`,
+        };
+      } catch (err) {
+        clearTimeout(timeoutId);
+        const isTimeout = err instanceof Error && err.name === 'AbortError';
+        return {
+          contactId: docSnap.id,
+          contactName: String(contact.name ?? 'Contact'),
+          status: 'failed',
+          reason: isTimeout ? 'Gateway timed out after 6s' : (err instanceof Error ? err.message : 'Network error'),
+        };
+      }
+    })
+  );
 
   const anySent = results.some((r) => r.status === 'sent');
   const anyFailed = results.some((r) => r.status === 'failed');
@@ -104,8 +149,9 @@ export const dispatchSosAlert = onCall(async (request) => {
     ? 'sent'
     : 'failed';
 
-  await db.collection('emergency_alerts').doc(alertId).set(
+  await alertRef.set(
     {
+      ownerUid: uid,
       deliveryChannelStatus,
       isFallbackLocation: isFallback,
       locationSource: isFallback ? 'fallback_demo' : 'gps',
@@ -122,32 +168,69 @@ export const dispatchSosAlert = onCall(async (request) => {
 });
 
 /**
+ * Synchronizes distinct corroborating authors across corroborations and comments subcollections.
+ * Strictly prevents self-corroboration by filtering out the report's authorUid,
+ * and prevents counting multiple comments from the same user as multiple corroborations.
+ */
+async function syncReportCorroborations(reportId: string): Promise<void> {
+  const reportRef = db.collection('safety_reports').doc(reportId);
+  const snap = await reportRef.get();
+  if (!snap.exists) return;
+
+  const data = snap.data();
+  const authorUid = data?.authorUid;
+
+  const distinctAuthors = new Set<string>();
+
+  // 1. Gather corroborations
+  const corroborationsSnap = await reportRef.collection('corroborations').get();
+  for (const doc of corroborationsSnap.docs) {
+    const cData = doc.data();
+    const corrUid = cData.corroboratorUid || doc.id;
+    if (corrUid && corrUid !== authorUid) {
+      distinctAuthors.add(corrUid);
+    }
+  }
+
+  // 2. Gather comments (ensure distinct author counting, excluding the author)
+  const commentsSnap = await reportRef.collection('comments').get();
+  for (const doc of commentsSnap.docs) {
+    const cData = doc.data();
+    if (cData.authorUid && cData.authorUid !== authorUid) {
+      distinctAuthors.add(cData.authorUid);
+    }
+  }
+
+  const distinctCount = distinctAuthors.size;
+  const updates: Record<string, any> = {
+    corroborationCount: distinctCount,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  if (data && data.verificationStatus === 'unverified' && distinctCount >= 3) {
+    updates.verificationStatus = 'community_corroborated';
+  }
+
+  await reportRef.update(updates);
+}
+
+/**
  * Automatically transitions report verification status from 'unverified' to 'community_corroborated'
- * once corroborated by >= 3 independent verified community members without self-corroboration.
- * Counts unique corroborators from the 'corroborations' subcollection server-side.
+ * once corroborated by >= 3 independent distinct verified community members without self-corroboration.
  */
 export const onReportCorroboration = onDocumentCreated(
   'safety_reports/{reportId}/corroborations/{corroboratorUid}',
   async (event) => {
     const reportId = event.params.reportId;
-    const reportRef = db.collection('safety_reports').doc(reportId);
-    const snap = await reportRef.get();
-    if (!snap.exists) return;
+    await syncReportCorroborations(reportId);
+  }
+);
 
-    const data = snap.data();
-    const corroborationsSnap = await reportRef.collection('corroborations').get();
-    const count = corroborationsSnap.size;
-
-    const updates: Record<string, any> = {
-      corroborationCount: count,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    if (data && data.verificationStatus === 'unverified' && count >= 3) {
-      updates.verificationStatus = 'community_corroborated';
-    }
-
-    await reportRef.update(updates);
+export const onReportCommentCreated = onDocumentCreated(
+  'safety_reports/{reportId}/comments/{commentId}',
+  async (event) => {
+    const reportId = event.params.reportId;
+    await syncReportCorroborations(reportId);
   }
 );
 

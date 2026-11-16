@@ -1,8 +1,19 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, initializeAuth, inMemoryPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const envObj = typeof process !== 'undefined' ? process.env : undefined;
+
+let isWebRuntime = true;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const rn = require('react-native');
+  if (rn?.Platform?.OS && rn.Platform.OS !== 'web') {
+    isWebRuntime = false;
+  }
+} catch {
+  isWebRuntime = typeof navigator === 'undefined' || (navigator as any).product !== 'ReactNative';
+}
 
 export const firebaseConfig = {
   apiKey: envObj ? envObj['EXPO_PUBLIC_FIREBASE_API_KEY'] : undefined,
@@ -32,7 +43,17 @@ let db: any = null;
 if (isFirebaseConfigured) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-    auth = getAuth(app);
+    if (isWebRuntime) {
+      auth = getAuth(app);
+    } else {
+      try {
+        auth = initializeAuth(app, {
+          persistence: inMemoryPersistence,
+        });
+      } catch {
+        auth = getAuth(app);
+      }
+    }
     db = firebaseConfig.firestoreDatabaseId
       ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
       : getFirestore(app);

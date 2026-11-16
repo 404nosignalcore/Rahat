@@ -4,22 +4,14 @@ import { LatLng } from '../../types';
 
 export class ExpoLocationService implements ILocationService {
   private isTrackingActive: boolean = false;
+  private trackingSubscription: LocationSubscription | null = null;
 
   async requestPermissions(): Promise<{ foreground: boolean; background: boolean }> {
     try {
       const fg = await Location.requestForegroundPermissionsAsync();
-      let bgGranted = false;
-      if (fg.granted) {
-        try {
-          const bg = await Location.requestBackgroundPermissionsAsync();
-          bgGranted = bg.granted;
-        } catch {
-          bgGranted = false;
-        }
-      }
       return {
         foreground: fg.granted,
-        background: bgGranted,
+        background: false, // Foreground service handles active journey monitoring; avoids Google Play background location policy scrutiny
       };
     } catch (error) {
       console.warn('[LocationService] Permission request failed:', error);
@@ -70,14 +62,37 @@ export class ExpoLocationService implements ILocationService {
   }
 
   async startBackgroundJourneyTracking(
-    _journeyId: string,
-    _onDeviationDetected?: (distance: number) => void
+    journeyId: string,
+    onDeviationDetected?: (distance: number) => void
   ): Promise<boolean> {
-    this.isTrackingActive = true;
-    return true;
+    if (this.isTrackingActive) {
+      return true;
+    }
+    try {
+      this.isTrackingActive = true;
+      this.trackingSubscription = await this.watchLocation(
+        (loc) => {
+          if (onDeviationDetected) {
+            onDeviationDetected(0);
+          }
+        },
+        (err) => {
+          console.warn(`[LocationService] Journey ${journeyId} tracking warning:`, err);
+        }
+      );
+      return true;
+    } catch (err) {
+      console.warn('[LocationService] Failed to start active journey tracking:', err);
+      this.isTrackingActive = false;
+      return false;
+    }
   }
 
   async stopBackgroundJourneyTracking(): Promise<void> {
+    if (this.trackingSubscription) {
+      this.trackingSubscription.remove();
+      this.trackingSubscription = null;
+    }
     this.isTrackingActive = false;
   }
 

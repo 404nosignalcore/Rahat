@@ -1,4 +1,17 @@
 jest.mock('expo-sms');
+jest.mock('expo-location', () => ({
+  requestForegroundPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  requestBackgroundPermissionsAsync: jest.fn(async () => ({ granted: false })),
+  getCurrentPositionAsync: jest.fn(async () => ({ coords: { latitude: 28.6139, longitude: 77.209 } })),
+  watchPositionAsync: jest.fn(async (_options, callback) => {
+    callback({ coords: { latitude: 28.6139, longitude: 77.209 } });
+    return { remove: jest.fn() };
+  }),
+  Accuracy: { Balanced: 3, High: 4 },
+}));
+jest.mock('react-native', () => ({
+  Platform: { OS: 'web' },
+}));
 
 import {
   MockAuthService,
@@ -19,7 +32,10 @@ import {
   saveEmergencyAlertDoc,
   deleteAccountCascade,
   offlineMockAdapter,
+  signInWithGooglePopup,
 } from '../src/services/firebaseClient';
+import { ExpoLocationService } from '../src/services/location/ExpoLocationService';
+import { Platform } from 'react-native';
 
 describe('SafeWalk Core Services & State Workflows', () => {
   let auth: MockAuthService;
@@ -563,6 +579,36 @@ describe('SafeWalk Core Services & State Workflows', () => {
 
       const contactsData = await loadUserPrivateAndContacts(dpdpUid);
       expect(contactsData.contacts.length).toBe(0);
+    });
+
+    test('signInWithGooglePopup rejects mobile devices with informative error instructing email/phone auth', async () => {
+      // Mock mobile platform
+      const originalOS = Platform.OS;
+      try {
+        (Platform as any).OS = 'android';
+        await expect(signInWithGooglePopup()).rejects.toThrow(
+          'Google popup sign-in is only supported in web browsers. On mobile (Android/iOS), please sign in using Email or Phone.'
+        );
+      } finally {
+        (Platform as any).OS = originalOS;
+      }
+    });
+
+    test('ExpoLocationService avoids background location permissions and tracks active journeys cleanly', async () => {
+      const locationService = new ExpoLocationService();
+      
+      // Permissions must request foreground only to satisfy Google Play Store review policies
+      const permissions = await locationService.requestPermissions();
+      expect(permissions.background).toBe(false);
+
+      // Starting background journey tracking activates live monitoring
+      const trackingStarted = await locationService.startBackgroundJourneyTracking('test-jrn-123');
+      expect(trackingStarted).toBe(true);
+      expect(locationService.isBackgroundTrackingActive()).toBe(true);
+
+      // Stopping tracking deactivates tracking
+      await locationService.stopBackgroundJourneyTracking();
+      expect(locationService.isBackgroundTrackingActive()).toBe(false);
     });
   });
 });

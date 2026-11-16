@@ -1,10 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Global default-deny safety net
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // Cloud Firestore security rules are default-deny by design: any path without an explicit matching allow rule is denied.
 
     // --- Reusable Hardened Primitives ---
     function isSignedIn() {

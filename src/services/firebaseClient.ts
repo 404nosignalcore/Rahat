@@ -334,6 +334,11 @@ export function subscribeToAuth(callback: (user: User | null) => void): () => vo
 }
 
 export async function signInWithGooglePopup(): Promise<User> {
+  if (Platform.OS !== 'web') {
+    throw new Error(
+      'Google popup sign-in is only supported in web browsers. On mobile (Android/iOS), please sign in using Email or Phone.'
+    );
+  }
   if (!isFirebaseConfigured || !auth) {
     throw new Error(
       'Firebase is not configured. Please supply valid EXPO_PUBLIC_FIREBASE_* keys in your .env file to enable Cloud Sign-In, or continue in Demo Exploration mode.'
