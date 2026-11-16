@@ -29,7 +29,19 @@ import {
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import firebaseConfig from '../../firebase-applet-config.json';
+import {
+  isFirebaseConfigured,
+  app as configuredApp,
+  auth as configuredAuth,
+  db as configuredDb,
+} from './firebase/firebaseConfig';
+import {
+  INITIAL_COMMUNITY_POSTS,
+  INITIAL_EMERGENCY_CONTACTS,
+  INITIAL_INCIDENT_REPORTS,
+  INITIAL_SAFE_CIRCLES,
+  INITIAL_USER_PROFILE,
+} from '../data/mockSafetyData';
 import {
   CommunityComment,
   CommunityPost,
@@ -42,46 +54,143 @@ import {
 } from '../types/safety';
 import { FIELD_LIMITS, sanitizeText } from '../utils/validation';
 
-let appInstance: any = null;
-try {
-  appInstance = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
-} catch (e) {
-  console.warn('[Rahat] Firebase initializeApp:', e);
-}
+export const db = isFirebaseConfigured ? configuredDb : null;
+export const auth: Auth =
+  isFirebaseConfigured && configuredAuth
+    ? configuredAuth
+    : ({
+        currentUser: null,
+        onAuthStateChanged: () => () => {},
+      } as unknown as Auth);
 
-let dbInstance: any = null;
-try {
-  if (appInstance) {
-    dbInstance = getFirestore(appInstance, firebaseConfig.firestoreDatabaseId);
+/**
+ * Offline Mock Adapter
+ * Provides robust in-memory and local storage state when Firebase is unconfigured.
+ * Guarantees zero unauthenticated network calls and prevents writing to any production project.
+ */
+class OfflineMockAdapter {
+  private reports: IncidentReport[] = [...INITIAL_INCIDENT_REPORTS];
+  private comments: CommunityComment[] = [];
+  private contacts: EmergencyContact[] = [...INITIAL_EMERGENCY_CONTACTS];
+  private journeys: JourneySession[] = [];
+  private alerts: SosAlertRecord[] = [];
+  private circles: SafeCircleGroup[] = [...INITIAL_SAFE_CIRCLES];
+  private posts: CommunityPost[] = [...INITIAL_COMMUNITY_POSTS];
+  private userProfile = { ...INITIAL_USER_PROFILE };
+
+  async fetchSafetyReports(): Promise<IncidentReport[]> {
+    return [...this.reports];
   }
-} catch (e) {
-  console.warn('[Rahat] Firestore initialization:', e);
-}
-export const db = dbInstance;
 
-let authInstance: any = null;
-try {
-  if (appInstance) {
-    if (Platform.OS === 'web') {
-      authInstance = getAuth(appInstance);
+  async createSafetyReportDoc(report: IncidentReport, _authorUid: string): Promise<void> {
+    const existingIdx = this.reports.findIndex((r) => r.id === report.id);
+    if (existingIdx >= 0) {
+      this.reports[existingIdx] = { ...report };
     } else {
-      try {
-        authInstance = initializeAuth(appInstance, {
-          persistence: inMemoryPersistence,
-        });
-      } catch {
-        authInstance = getAuth(appInstance);
+      this.reports.unshift({ ...report });
+    }
+  }
+
+  async addSafetyReportCommentDoc(comment: CommunityComment): Promise<void> {
+    this.comments.push(comment);
+    const rep = this.reports.find((r) => r.id === comment.reportId);
+    if (rep) {
+      rep.comments = rep.comments ? [...rep.comments, comment] : [comment];
+    }
+  }
+
+  async incrementReportCounterDoc(
+    reportId: string,
+    field: 'corroborationCount' | 'outdatedFlags' | 'abuseFlags',
+    nextValue: number
+  ): Promise<void> {
+    const rep = this.reports.find((r) => r.id === reportId);
+    if (rep) {
+      (rep as any)[field] = nextValue;
+      if (field === 'corroborationCount' && nextValue >= 3 && rep.verificationStatus === 'unverified') {
+        rep.verificationStatus = 'community_corroborated';
       }
     }
   }
-} catch (e) {
-  console.warn('[Rahat] Firebase Auth initialization safe fallback:', e);
-  authInstance = {
-    currentUser: null,
-    onAuthStateChanged: () => () => {},
-  } as unknown as Auth;
+
+  async loadUserPrivateAndContacts(_uid: string): Promise<{
+    phone?: string;
+    consents?: ConsentSettings;
+    contacts: EmergencyContact[];
+  }> {
+    return {
+      phone: this.userProfile.phone || '',
+      consents: this.userProfile.consents,
+      contacts: [...this.contacts],
+    };
+  }
+
+  async updateUserProfileAndConsents(params: {
+    uid: string;
+    displayName: string;
+    preferredLanguage: 'en' | 'hi';
+    phone: string;
+    consents: ConsentSettings;
+  }): Promise<void> {
+    this.userProfile.displayName = params.displayName;
+    this.userProfile.preferredLanguage = params.preferredLanguage;
+    this.userProfile.phone = params.phone;
+    this.userProfile.consents = params.consents;
+  }
+
+  async saveEmergencyContactDoc(contact: EmergencyContact): Promise<void> {
+    const idx = this.contacts.findIndex((c) => c.id === contact.id);
+    if (idx >= 0) {
+      this.contacts[idx] = { ...contact };
+    } else {
+      this.contacts.push({ ...contact });
+    }
+  }
+
+  async deleteEmergencyContactDoc(_ownerUid: string, contactId: string): Promise<void> {
+    this.contacts = this.contacts.filter((c) => c.id !== contactId);
+  }
+
+  async saveJourneyDoc(journey: JourneySession, _isNew: boolean): Promise<void> {
+    const idx = this.journeys.findIndex((j) => j.id === journey.id);
+    if (idx >= 0) {
+      this.journeys[idx] = { ...journey };
+    } else {
+      this.journeys.push({ ...journey });
+    }
+  }
+
+  async saveEmergencyAlertDoc(alert: SosAlertRecord, _isNew: boolean): Promise<void> {
+    const idx = this.alerts.findIndex((a) => a.id === alert.id);
+    if (idx >= 0) {
+      this.alerts[idx] = { ...alert };
+    } else {
+      this.alerts.push({ ...alert });
+    }
+  }
+
+  async createSafeCircleDoc(circle: SafeCircleGroup): Promise<void> {
+    const idx = this.circles.findIndex((c) => c.id === circle.id);
+    if (idx >= 0) {
+      this.circles[idx] = { ...circle };
+    } else {
+      this.circles.push({ ...circle });
+    }
+  }
+
+  async createCommunityPostDoc(post: CommunityPost): Promise<void> {
+    this.posts.unshift({ ...post });
+  }
+
+  async deleteAccountCascade(_uid: string): Promise<void> {
+    this.contacts = [];
+    this.journeys = [];
+    this.alerts = [];
+    this.userProfile = { ...INITIAL_USER_PROFILE };
+  }
 }
-export const auth: Auth = authInstance;
+
+export const offlineMockAdapter = new OfflineMockAdapter();
 
 export enum OperationType {
   CREATE = 'create',
@@ -139,22 +248,22 @@ export function handleFirestoreError(
  * Mandatory boot connectivity check required by Firebase Integration guidelines.
  */
 export async function testFirestoreConnection(): Promise<'online' | 'offline'> {
+  if (!isFirebaseConfigured || !db) return 'offline';
   try {
-    if (!db) return 'offline';
     await getDocFromServer(doc(db, 'test', 'connection'));
     return 'online';
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration (client offline).');
-      return 'offline';
-    }
-    return 'online';
+    return 'offline';
   }
 }
 
 export function subscribeToAuth(callback: (user: User | null) => void): () => void {
+  if (!isFirebaseConfigured || !auth) {
+    callback(null);
+    return () => {};
+  }
   try {
-    if (auth && typeof onAuthStateChanged === 'function') {
+    if (typeof onAuthStateChanged === 'function') {
       return onAuthStateChanged(auth, callback);
     }
   } catch (e) {
@@ -165,7 +274,11 @@ export function subscribeToAuth(callback: (user: User | null) => void): () => vo
 }
 
 export async function signInWithGooglePopup(): Promise<User> {
-  if (!auth) throw new Error('Firebase Auth is not available.');
+  if (!isFirebaseConfigured || !auth) {
+    throw new Error(
+      'Firebase is not configured. Please supply valid EXPO_PUBLIC_FIREBASE_* keys in your .env file to enable Cloud Sign-In, or continue in Demo Exploration mode.'
+    );
+  }
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   const cred = await signInWithPopup(auth, provider);
@@ -174,12 +287,13 @@ export async function signInWithGooglePopup(): Promise<User> {
 }
 
 export async function signOutFirebase(): Promise<void> {
-  if (auth && typeof firebaseSignOut === 'function') {
+  if (isFirebaseConfigured && auth && typeof firebaseSignOut === 'function') {
     await firebaseSignOut(auth);
   }
 }
 
 export async function ensureUserDocuments(user: User, preferredLanguage: 'en' | 'hi' = 'en') {
+  if (!isFirebaseConfigured || !db) return;
   const uid = user.uid;
   const publicPath = `users/${uid}`;
   const privatePath = `users/${uid}/private/info`;
@@ -224,6 +338,10 @@ export async function updateUserProfileAndConsents(params: {
   phone: string;
   consents: ConsentSettings;
 }): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.updateUserProfileAndConsents(params);
+    return;
+  }
   const { uid, displayName, preferredLanguage, phone, consents } = params;
   try {
     await updateDoc(doc(db, 'users', uid), {
@@ -249,6 +367,9 @@ export async function loadUserPrivateAndContacts(uid: string): Promise<{
   consents?: ConsentSettings;
   contacts: EmergencyContact[];
 }> {
+  if (!isFirebaseConfigured || !db) {
+    return offlineMockAdapter.loadUserPrivateAndContacts(uid);
+  }
   let phone: string | undefined;
   let consents: ConsentSettings | undefined;
   const contacts: EmergencyContact[] = [];
@@ -292,6 +413,10 @@ export async function loadUserPrivateAndContacts(uid: string): Promise<{
 }
 
 export async function saveEmergencyContactDoc(contact: EmergencyContact): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.saveEmergencyContactDoc(contact);
+    return;
+  }
   const path = `users/${contact.ownerUid}/emergency_contacts/${contact.id}`;
   try {
     const ref = doc(db, 'users', contact.ownerUid, 'emergency_contacts', contact.id);
@@ -324,6 +449,10 @@ export async function saveEmergencyContactDoc(contact: EmergencyContact): Promis
 }
 
 export async function deleteEmergencyContactDoc(ownerUid: string, contactId: string): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.deleteEmergencyContactDoc(ownerUid, contactId);
+    return;
+  }
   const path = `users/${ownerUid}/emergency_contacts/${contactId}`;
   try {
     await deleteDoc(doc(db, 'users', ownerUid, 'emergency_contacts', contactId));
@@ -333,6 +462,10 @@ export async function deleteEmergencyContactDoc(ownerUid: string, contactId: str
 }
 
 export async function createSafetyReportDoc(report: IncidentReport, authorUid: string): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.createSafetyReportDoc(report, authorUid);
+    return;
+  }
   const path = `safety_reports/${report.id}`;
   try {
     await setDoc(doc(db, 'safety_reports', report.id), {
@@ -359,6 +492,9 @@ export async function createSafetyReportDoc(report: IncidentReport, authorUid: s
 }
 
 export async function fetchSafetyReports(): Promise<IncidentReport[]> {
+  if (!isFirebaseConfigured || !db) {
+    return offlineMockAdapter.fetchSafetyReports();
+  }
   const path = 'safety_reports';
   try {
     const q = query(
@@ -399,6 +535,10 @@ export async function fetchSafetyReports(): Promise<IncidentReport[]> {
 }
 
 export async function addSafetyReportCommentDoc(comment: CommunityComment): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.addSafetyReportCommentDoc(comment);
+    return;
+  }
   const path = `safety_reports/${comment.reportId}/comments/${comment.id}`;
   try {
     await setDoc(doc(db, 'safety_reports', comment.reportId, 'comments', comment.id), {
@@ -420,6 +560,10 @@ export async function incrementReportCounterDoc(
   field: 'corroborationCount' | 'outdatedFlags' | 'abuseFlags',
   nextValue: number
 ): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.incrementReportCounterDoc(reportId, field, nextValue);
+    return;
+  }
   const path = `safety_reports/${reportId}`;
   try {
     await updateDoc(doc(db, 'safety_reports', reportId), {
@@ -432,6 +576,10 @@ export async function incrementReportCounterDoc(
 }
 
 export async function saveJourneyDoc(journey: JourneySession, isNew: boolean): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.saveJourneyDoc(journey, isNew);
+    return;
+  }
   const path = `journeys/${journey.id}`;
   try {
     if (isNew) {
@@ -466,6 +614,10 @@ export async function saveJourneyDoc(journey: JourneySession, isNew: boolean): P
 }
 
 export async function saveEmergencyAlertDoc(alert: SosAlertRecord, isNew: boolean): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.saveEmergencyAlertDoc(alert, isNew);
+    return;
+  }
   const path = `emergency_alerts/${alert.id}`;
   try {
     if (isNew) {
@@ -495,6 +647,10 @@ export async function saveEmergencyAlertDoc(alert: SosAlertRecord, isNew: boolea
 }
 
 export async function createSafeCircleDoc(circle: SafeCircleGroup): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.createSafeCircleDoc(circle);
+    return;
+  }
   const path = `safe_circles/${circle.id}`;
   try {
     await setDoc(doc(db, 'safe_circles', circle.id), {
@@ -511,6 +667,10 @@ export async function createSafeCircleDoc(circle: SafeCircleGroup): Promise<void
 }
 
 export async function createCommunityPostDoc(post: CommunityPost): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.createCommunityPostDoc(post);
+    return;
+  }
   const path = `community_posts/${post.id}`;
   try {
     await setDoc(doc(db, 'community_posts', post.id), {
@@ -531,6 +691,10 @@ export async function createCommunityPostDoc(post: CommunityPost): Promise<void>
 }
 
 export async function deleteAccountCascade(uid: string): Promise<void> {
+  if (!isFirebaseConfigured || !db) {
+    await offlineMockAdapter.deleteAccountCascade(uid);
+    return;
+  }
   try {
     const contactsSnap = await getDocs(
       query(collection(db, 'users', uid, 'emergency_contacts'), where('ownerUid', '==', uid))

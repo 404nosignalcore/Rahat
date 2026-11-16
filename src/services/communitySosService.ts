@@ -6,10 +6,11 @@ import {
 import { getDistanceMeters } from '../utils/safetyRiskEngine';
 
 /**
- * Verified Community Responders Pool
- * Represents nearby active, verified SafeWalk/Raksha registered members in the area.
+ * DEV-ONLY Simulated Community Responders Pool
+ * Used exclusively for local offline testing and unit tests.
+ * NEVER presented as real responders in production!
  */
-export const REGISTERED_COMMUNITY_HEROES = [
+export const DEV_SIMULATED_COMMUNITY_HEROES = [
   {
     id: 'hero-priya-s',
     name: 'Priya Sharma',
@@ -77,6 +78,9 @@ export const REGISTERED_COMMUNITY_HEROES = [
   },
 ];
 
+// Backwards-compatible alias for existing imports
+export const REGISTERED_COMMUNITY_HEROES = DEV_SIMULATED_COMMUNITY_HEROES;
+
 export const WAVE_RADII: Record<1 | 2 | 3, number> = {
   1: 500, // 500 meters
   2: 1000, // 1000 meters
@@ -84,21 +88,46 @@ export const WAVE_RADII: Record<1 | 2 | 3, number> = {
 };
 
 /**
- * Builds candidate community responders relative to the victim's current GPS coordinates.
+ * Guard to ensure simulated community responders are NEVER dispatched in production.
+ * Simulation is only enabled in automated Jest testing or when EXPO_PUBLIC_ENABLE_COMMUNITY_SIMULATION === 'true' in development.
  */
-export function getAvailableCommunityCandidates(victimLat: number, victimLng: number): CommunityResponder[] {
-  return REGISTERED_COMMUNITY_HEROES.map((h) => {
+export function isCommunitySimulationEnabled(): boolean {
+  const envObj = typeof process !== 'undefined' ? process.env : undefined;
+  if (envObj && envObj['NODE_ENV'] === 'test') {
+    return true;
+  }
+  const flag = envObj ? envObj['EXPO_PUBLIC_ENABLE_COMMUNITY_SIMULATION'] : undefined;
+  if (flag === 'true' || flag === '1') {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Builds candidate community responders relative to the victim's current GPS coordinates.
+ * Returns an empty array in production unless simulation is explicitly enabled.
+ */
+export function getAvailableCommunityCandidates(
+  victimLat: number,
+  victimLng: number,
+  forceSimulation = false
+): CommunityResponder[] {
+  if (!forceSimulation && !isCommunitySimulationEnabled()) {
+    return [];
+  }
+
+  return DEV_SIMULATED_COMMUNITY_HEROES.map((h) => {
     const lat = victimLat + h.offsetLat;
     const lng = victimLng + h.offsetLng;
     const distanceMeters = Math.round(getDistanceMeters(victimLat, victimLng, lat, lng));
 
     return {
       id: h.id,
-      name: h.name,
+      name: `[Simulated] ${h.name}`,
       phone: h.phone,
       avatarColor: h.avatarColor,
       isVerified: h.isVerified,
-      verificationBadge: h.verificationBadge,
+      verificationBadge: `${h.verificationBadge} (Dev Simulation)`,
       rating: h.rating,
       acceptedHelpsCount: h.acceptedHelpsCount,
       distanceMeters,

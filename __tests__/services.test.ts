@@ -1,10 +1,20 @@
+jest.mock('expo-sms');
+
 import {
   MockAuthService,
   MockDatabaseService,
   MockEmergencyService,
 } from '../src/services/mock/MockServices';
 import { MOCK_EMERGENCY_CONTACTS } from '../src/services/mock/mockData';
-import { alertService, buildEmergencySmsText } from '../src/services/alertService';
+import { alertService, buildEmergencySmsText, sendNativeEmergencySms } from '../src/services/alertService';
+import * as SMS from 'expo-sms';
+import {
+  testFirestoreConnection,
+  fetchSafetyReports,
+  createSafetyReportDoc,
+  saveEmergencyContactDoc,
+  loadUserPrivateAndContacts,
+} from '../src/services/firebaseClient';
 
 describe('SafeWalk Core Services & State Workflows', () => {
   let auth: MockAuthService;
@@ -242,6 +252,88 @@ describe('SafeWalk Core Services & State Workflows', () => {
       expect(capturedBody.locationSource).toBe('fallback_demo');
       expect(capturedBody.isFallbackLocation).toBe(true);
       expect(capturedHeaders['Authorization']).toMatch(/^Bearer /);
+    });
+
+    test('sendNativeEmergencySms dispatches SMS via expo-sms with valid coordinates and active contacts', async () => {
+      const sendSMSAsyncSpy = jest.spyOn(SMS, 'sendSMSAsync');
+      const contacts = [
+        {
+          id: 'c1',
+          name: 'Priya',
+          phone: '+91 98765 43210',
+          notifyOnSOS: true,
+        },
+        {
+          id: 'c2',
+          name: 'Aman',
+          phone: '+91 99999 88888',
+          notifyOnSOS: false,
+        },
+      ];
+
+      const success = await sendNativeEmergencySms(contacts, 28.6139, 77.209, 'gps');
+      expect(success).toBe(true);
+      expect(sendSMSAsyncSpy).toHaveBeenCalledTimes(1);
+      const [recipients, message] = sendSMSAsyncSpy.mock.calls[0];
+      expect(recipients).toEqual(['+919876543210']);
+      expect(message).toContain('RAHAT SOS Emergency Alert');
+      expect(message).toContain('https://maps.google.com/?q=28.613900,77.209000');
+    });
+
+    test('testFirestoreConnection returns offline and avoids remote network calls when Firebase is unconfigured', async () => {
+      const status = await testFirestoreConnection();
+      expect(status).toBe('offline');
+    });
+
+    test('offlineMockAdapter stores and retrieves safety reports and contacts without touching Firestore', async () => {
+      const initialReports = await fetchSafetyReports();
+      const initialCount = initialReports.length;
+
+      const newReportId = `rep-mock-${Date.now()}`;
+      await createSafetyReportDoc(
+        {
+          id: newReportId,
+          authorUid: 'user-mock-1',
+          category: 'poor_lighting',
+          title: 'Unlit Alley Test',
+          description: 'Verified offline storage test report',
+          address: 'Connaught Place',
+          latitude: 28.6315,
+          longitude: 77.2167,
+          severity: 3,
+          verificationStatus: 'unverified',
+          corroborationCount: 0,
+          outdatedFlags: 0,
+          abuseFlags: 0,
+          isSynthetic: false,
+          timestamp: new Date().toISOString(),
+          timeHour: 21,
+          lightingCondition: 'dim',
+          comments: [],
+        },
+        'user-mock-1'
+      );
+
+      const updatedReports = await fetchSafetyReports();
+      expect(updatedReports.length).toBe(initialCount + 1);
+      const inserted = updatedReports.find((r) => r.id === newReportId);
+      expect(inserted).toBeDefined();
+      expect(inserted?.title).toBe('Unlit Alley Test');
+
+      await saveEmergencyContactDoc({
+        id: 'contact-mock-1',
+        ownerUid: 'user-mock-1',
+        name: 'Kavita',
+        relationship: 'Mother',
+        phone: '+91 98111 22233',
+        verificationStatus: 'unverified',
+        notifyOnSOS: true,
+      });
+
+      const userData = await loadUserPrivateAndContacts('user-mock-1');
+      const foundContact = userData.contacts.find((c) => c.id === 'contact-mock-1');
+      expect(foundContact).toBeDefined();
+      expect(foundContact?.name).toBe('Kavita');
     });
   });
 });

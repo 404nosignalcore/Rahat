@@ -5,6 +5,7 @@ import {
   createCommunitySosRequest,
   expandProximityWave,
   getAvailableCommunityCandidates,
+  isCommunitySimulationEnabled,
   reportSuspiciousResponder,
   resolveCommunitySos,
   setResponderArrived,
@@ -182,5 +183,40 @@ describe('Community SOS Rescue Network Service', () => {
     req = resolveCommunitySos(req);
     expect(req.status).toBe('resolved');
     expect(req.auditLog.some((l) => l.type === 'resolved')).toBe(true);
+  });
+
+  describe('Production Community Safety Simulation Guards', () => {
+    const originalEnv = process.env.NODE_ENV;
+    const originalSimFlag = process.env.EXPO_PUBLIC_ENABLE_COMMUNITY_SIMULATION;
+
+    afterEach(() => {
+      process.env.NODE_ENV = originalEnv;
+      process.env.EXPO_PUBLIC_ENABLE_COMMUNITY_SIMULATION = originalSimFlag;
+    });
+
+    test('isCommunitySimulationEnabled returns false in production when simulation flag is unset', () => {
+      (process.env as any).NODE_ENV = 'production';
+      delete process.env.EXPO_PUBLIC_ENABLE_COMMUNITY_SIMULATION;
+
+      expect(isCommunitySimulationEnabled()).toBe(false);
+    });
+
+    test('getAvailableCommunityCandidates returns empty array in production to prevent fake rescue claims', () => {
+      (process.env as any).NODE_ENV = 'production';
+      delete process.env.EXPO_PUBLIC_ENABLE_COMMUNITY_SIMULATION;
+
+      const candidates = getAvailableCommunityCandidates(28.6139, 77.209);
+      expect(candidates).toEqual([]);
+      expect(candidates.length).toBe(0);
+    });
+
+    test('simulation flag allows testing simulated responders with [Simulated] name prefix', () => {
+      process.env.EXPO_PUBLIC_ENABLE_COMMUNITY_SIMULATION = 'true';
+      const candidates = getAvailableCommunityCandidates(28.6139, 77.209);
+      expect(candidates.length).toBeGreaterThan(0);
+      for (const responder of candidates) {
+        expect(responder.name.startsWith('[Simulated]')).toBe(true);
+      }
+    });
   });
 });

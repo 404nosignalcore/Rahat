@@ -45,7 +45,7 @@ import { canSubmitWithSpamCooldown } from '../utils/validation';
 import { locationService } from '../services/locationAdapter';
 import { LocationFix } from '../services/contracts';
 import { routeService } from '../services/routeService';
-import { alertService, buildMapShareUrl } from '../services/alertService';
+import { alertService, buildMapShareUrl, sendNativeEmergencySms } from '../services/alertService';
 import {
   acceptCommunitySosResponse,
   cancelCommunitySosByVictim,
@@ -53,6 +53,7 @@ import {
   createCommunitySosRequest,
   expandProximityWave,
   getAvailableCommunityCandidates,
+  isCommunitySimulationEnabled,
   reportSuspiciousResponder,
   resolveCommunitySos,
   setResponderArrived,
@@ -939,6 +940,19 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       isFallbackLocation: loc.source === 'fallback_demo',
     });
     setActiveSosAlert(alertRecord);
+
+    // If cloud gateway is unconfigured or offline fallback, actively dispatch native SMS via expo-sms
+    if (
+      alertRecord.deliveryChannelStatus === 'offline_fallback' ||
+      alertRecord.deliveryChannelStatus === 'failed'
+    ) {
+      try {
+        await sendNativeEmergencySms(contacts, loc.lat, loc.lng, loc.source);
+      } catch (smsErr) {
+        console.warn('[SafeWalkContext] Automatic native SMS fallback failed:', smsErr);
+      }
+    }
+
     if (loc.source === 'fallback_demo') {
       setStatusBanner('⚠️ SOS Alert dispatched with UNVERIFIED location warning (GPS offline).');
     } else {
@@ -993,8 +1007,15 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     const victimName = user.displayName || 'SafeWalk Member';
-    const victimPhone = user.phone || '+91 98765 43210';
+    const victimPhone = (user.phone || '').trim();
     const victimUid = user.uid || 'usr-local';
+
+    if (!victimPhone) {
+      Alert.alert(
+        'Phone Number Recommended',
+        'You have not added a contact phone number to your profile. Community responders will not be able to call you directly to verify your status or coordinate.'
+      );
+    }
 
     const currentReq = createCommunitySosRequest(
       { uid: victimUid, name: victimName, phone: victimPhone },
@@ -1004,79 +1025,73 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
 
     setActiveCommunitySos(currentReq);
-    if (loc.source === 'fallback_demo') {
-      setStatusBanner(`⚠️ Community SOS broadcast active with UNVERIFIED coordinates (GPS offline). Alerting nearby members...`);
+
+    // DEV SIMULATION ONLY: Never fabricate responders in production!
+    if (isCommunitySimulationEnabled()) {
+      setStatusBanner(`[DEV SIMULATION] Community SOS active (ID: ${currentReq.id}) with simulated responders.`);
+
+      const candidates = getAvailableCommunityCandidates(currentLocation.lat, currentLocation.lng, true);
+      if (candidates.length > 0) {
+        // Wave 1: First responder accepts at ~2.5s
+        const t1 = setTimeout(() => {
+          setActiveCommunitySos((prev) => {
+            if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+            const res = acceptCommunitySosResponse(prev, candidates[0]);
+            return res.ok ? res.request : prev;
+          });
+        }, 2500);
+        communityTimeoutsRef.current.push(t1);
+
+        // Wave 1: Second responder accepts at ~5.0s
+        if (candidates.length > 1) {
+          const t2 = setTimeout(() => {
+            setActiveCommunitySos((prev) => {
+              if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+              const res = acceptCommunitySosResponse(prev, candidates[1]);
+              return res.ok ? res.request : prev;
+            });
+          }, 5000);
+          communityTimeoutsRef.current.push(t2);
+        }
+
+        // Wave expansion at ~7s (Wave 2: 1000m)
+        const tWave = setTimeout(() => {
+          setActiveCommunitySos((prev) => {
+            if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+            return expandProximityWave(prev);
+          });
+        }, 7000);
+        communityTimeoutsRef.current.push(tWave);
+
+        // Wave 2: Third responder accepts at ~8.5s
+        if (candidates.length > 2) {
+          const t3 = setTimeout(() => {
+            setActiveCommunitySos((prev) => {
+              if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+              const res = acceptCommunitySosResponse(prev, candidates[2]);
+              return res.ok ? res.request : prev;
+            });
+          }, 8500);
+          communityTimeoutsRef.current.push(t3);
+        }
+
+        // Travel simulation at ~12s
+        const t4 = setTimeout(() => {
+          setActiveCommunitySos((prev) => {
+            if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
+            return setResponderOnTheWay(prev, candidates[0].id);
+          });
+        }, 12000);
+        communityTimeoutsRef.current.push(t4);
+      }
     } else {
-      setStatusBanner(`Community SOS broadcast active (ID: ${currentReq.id}). Alerting nearby members...`);
+      // Production mode: Real broadcast to community network, no fake auto-accept bots
+      if (loc.source === 'fallback_demo') {
+        setStatusBanner(`⚠️ Community SOS active with UNVERIFIED coordinates (GPS offline). Alerting nearby network...`);
+      } else {
+        setStatusBanner(`Community SOS broadcast active (ID: ${currentReq.id}). Broadcasting to nearby verified members...`);
+      }
     }
-
-    const candidates = getAvailableCommunityCandidates(currentLocation.lat, currentLocation.lng);
-
-    // Wave 1: First responder (e.g. Priya Sharma) accepts at ~2.5s
-    const t1 = setTimeout(() => {
-      setActiveCommunitySos((prev) => {
-        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
-        const res = acceptCommunitySosResponse(prev, candidates[0]);
-        return res.ok ? res.request : prev;
-      });
-    }, 2500);
-    communityTimeoutsRef.current.push(t1);
-
-    // Wave 1: Second responder (e.g. Vikram Singh) accepts at ~5.0s
-    const t2 = setTimeout(() => {
-      setActiveCommunitySos((prev) => {
-        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
-        const res = acceptCommunitySosResponse(prev, candidates[1]);
-        return res.ok ? res.request : prev;
-      });
-    }, 5000);
-    communityTimeoutsRef.current.push(t2);
-
-    // Wave expansion at ~7s (Wave 2: 1000m)
-    const tWave = setTimeout(() => {
-      setActiveCommunitySos((prev) => {
-        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
-        return expandProximityWave(prev);
-      });
-    }, 7000);
-    communityTimeoutsRef.current.push(tWave);
-
-    // Wave 2: Third responder (e.g. Dr. Ananya Sen) accepts at ~8.5s -> strictly caps at 3 responders
-    const t3 = setTimeout(() => {
-      setActiveCommunitySos((prev) => {
-        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
-        const res = acceptCommunitySosResponse(prev, candidates[2]);
-        return res.ok ? res.request : prev;
-      });
-    }, 8500);
-    communityTimeoutsRef.current.push(t3);
-
-    // First responder starts travel at ~12s
-    const t4 = setTimeout(() => {
-      setActiveCommunitySos((prev) => {
-        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
-        return setResponderOnTheWay(prev, candidates[0].id);
-      });
-    }, 12000);
-    communityTimeoutsRef.current.push(t4);
-
-    // Second responder starts travel at ~15s
-    const t5 = setTimeout(() => {
-      setActiveCommunitySos((prev) => {
-        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
-        return setResponderOnTheWay(prev, candidates[1].id);
-      });
-    }, 15000);
-    communityTimeoutsRef.current.push(t5);
-
-    // First responder arrives at ~22s
-    const t6 = setTimeout(() => {
-      setActiveCommunitySos((prev) => {
-        if (!prev || prev.isCancelled || prev.status === 'cancelled' || prev.status === 'resolved') return prev;
-        return setResponderArrived(prev, candidates[0].id);
-      });
-    }, 22000);
-    communityTimeoutsRef.current.push(t6);
   };
 
   const cancelCommunitySos = async (reason = "I'm safe now.") => {
@@ -1124,6 +1139,14 @@ export const SafeWalkProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const simulateIncomingRescueAlert = () => {
+    if (!isCommunitySimulationEnabled()) {
+      Alert.alert(
+        'Simulation Disabled',
+        'Incoming community rescue simulation is only available in development test mode.'
+      );
+      return;
+    }
+
     const mockRequest = createCommunitySosRequest(
       { uid: 'usr-victim-ananya', name: 'Ananya Roy', phone: '+91 98765 43210' },
       { lat: currentLocation.lat + 0.0032, lng: currentLocation.lng - 0.0025 },

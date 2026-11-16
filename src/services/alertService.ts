@@ -1,5 +1,8 @@
 import { ContactDeliveryStatus, EmergencyContact, SosAlertRecord } from '../types/safety';
 import { INotificationService } from './contracts';
+import { app, isFirebaseConfigured } from './firebase/firebaseConfig';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import * as SMS from 'expo-sms';
 
 export function buildMapShareUrl(lat: number, lng: number): string {
   return `https://maps.google.com/?q=${lat.toFixed(6)},${lng.toFixed(6)}`;
@@ -16,6 +19,31 @@ export function buildEmergencySmsText(
     return `[CRITICAL WARNING: GPS UNAVAILABLE - UNVERIFIED LOCATION]\nRAHAT SOS Alert triggered at ${timestampIso}. Device GPS was offline; last simulated demo location: ${url}. Confirm victim's true location via direct phone call.`;
   }
   return `RAHAT SOS Emergency Alert at ${timestampIso}. My last known live location: ${url}`;
+}
+
+export async function sendNativeEmergencySms(
+  contacts: Array<{ phone: string; notifyOnSOS: boolean }>,
+  lat: number,
+  lng: number,
+  locationSource: 'gps' | 'fallback_demo' = 'gps'
+): Promise<boolean> {
+  const activeContacts = contacts.filter((c) => c.notifyOnSOS);
+  const phoneNumbers = activeContacts
+    .map((c) => c.phone.replace(/[^\d+]/g, ''))
+    .filter((p) => p.length >= 7);
+  if (phoneNumbers.length === 0) return false;
+
+  try {
+    const isAvailable = await SMS.isAvailableAsync();
+    if (!isAvailable) return false;
+
+    const text = buildEmergencySmsText(lat, lng, new Date().toISOString(), locationSource);
+    const { result } = await SMS.sendSMSAsync(phoneNumbers, text);
+    return result === 'sent';
+  } catch (err) {
+    console.warn('[alertService] sendNativeEmergencySms error:', err);
+    return false;
+  }
 }
 
 export const alertService: INotificationService = {
@@ -40,6 +68,80 @@ export const alertService: INotificationService = {
       : 'gps';
 
     const envObj = typeof process !== 'undefined' ? process.env : undefined;
+
+    // 1. Primary Production Cloud Channel: Firebase Cloud Function (dispatchSosAlert)
+    if (isFirebaseConfigured && app) {
+      try {
+        const functions = getFunctions(app);
+        const dispatchCallable = httpsCallable<any, {
+          alertId: string;
+          deliveryChannelStatus: string;
+          results?: { contactId: string; status: 'sent' | 'failed' | 'unconfigured'; reason?: string }[];
+        }>(functions, 'dispatchSosAlert');
+
+        const cloudRes = await dispatchCallable({
+          alertId,
+          latitude,
+          longitude,
+          mapShareUrl,
+          isFallbackLocation: effectiveIsFallback,
+          locationSource: effectiveSource,
+        });
+
+        if (cloudRes.data?.results && Array.isArray(cloudRes.data.results)) {
+          const payload = cloudRes.data;
+          const deliveries: ContactDeliveryStatus[] = activeContacts.map((c) => {
+            const match = payload.results?.find((r) => r.contactId === c.id);
+            if (match?.status === 'sent') {
+              return {
+                contactId: c.id,
+                contactName: c.name,
+                phone: c.phone,
+                status: 'sent',
+                detail: match.reason || 'Confirmed delivered via Cloud Function SMS gateway',
+              };
+            }
+            if (match?.status === 'unconfigured') {
+              return {
+                contactId: c.id,
+                contactName: c.name,
+                phone: c.phone,
+                status: 'offline_fallback',
+                detail: match.reason || 'SMS gateway unconfigured in Cloud Function',
+              };
+            }
+            return {
+              contactId: c.id,
+              contactName: c.name,
+              phone: c.phone,
+              status: 'failed',
+              detail: match?.reason || 'Cloud Function SMS gateway failed',
+            };
+          });
+
+          const sentCount = deliveries.filter((d) => d.status === 'sent').length;
+          if (sentCount > 0) {
+            return {
+              id: alertId,
+              ownerUid,
+              status: 'active',
+              deliveryChannelStatus: sentCount === deliveries.length ? 'sent' : 'partial_failure',
+              latitude,
+              longitude,
+              mapShareUrl,
+              triggeredAt,
+              contactDeliveries: deliveries,
+              locationSource: effectiveSource,
+              isFallbackLocation: effectiveIsFallback,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[alertService] Callable Cloud Function error, falling back to HTTP/native:', err);
+      }
+    }
+
+    // 2. Secondary Channel: HTTP Webhook Endpoint (EXPO_PUBLIC_SOS_FUNCTION_URL)
     const functionEndpoint =
       (envObj ? envObj['EXPO_PUBLIC_SOS_FUNCTION_URL'] : undefined) ||
       (typeof import.meta !== 'undefined' &&
@@ -51,8 +153,7 @@ export const alertService: INotificationService = {
       (envObj ? envObj['RAHAT_API_TOKEN'] : undefined) ||
       'rahat-secure-client-token';
 
-    // Honest delivery tracking: only mark 'sent' if a real backend gateway confirms HTTP 200.
-    if (functionEndpoint) {
+    if (functionEndpoint && functionEndpoint.trim() !== '') {
       try {
         const res = await fetch(functionEndpoint, {
           method: 'POST',
@@ -130,11 +231,11 @@ export const alertService: INotificationService = {
           };
         }
       } catch {
-        // Fall through to honest offline/unconfigured fallback
+        // Fall through to native SMS / honest offline fallback
       }
     }
 
-    // No external SMS/push gateway configured or network offline -> NEVER fake delivery!
+    // 3. Honest offline fallback if no cloud gateway is configured
     const fallbackDeliveries: ContactDeliveryStatus[] = activeContacts.map((c: EmergencyContact) => ({
       contactId: c.id,
       contactName: c.name,

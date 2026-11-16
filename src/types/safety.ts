@@ -247,6 +247,7 @@ export interface UserProfile {
   displayName: string;
   phone: string;
   photoUrl?: string;
+  preferredLanguage?: 'en' | 'hi';
   role: 'citizen' | 'admin';
   isAuthenticated: boolean;
   isDemoSession: boolean;

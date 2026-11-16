@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { IEmergencyService } from '../interfaces/IEmergencyService';
 import { EmergencyContact, LatLng, SOSAlert } from '../../types';
 import { generateMapsLink } from '../../utils/geo';
+import { sendNativeEmergencySms } from '../alertService';
 
 export class NativeEmergencyService implements IEmergencyService {
   async triggerSOS(
@@ -65,21 +66,10 @@ export class NativeEmergencyService implements IEmergencyService {
   async sendEmergencySMS(
     contacts: EmergencyContact[],
     location: LatLng,
-    userName: string
+    _userName: string
   ): Promise<boolean> {
     try {
-      const activeContacts = contacts.filter((c) => c.notifyOnSOS);
-      const phoneNumbers = activeContacts.map((c) => c.phone);
-      if (phoneNumbers.length === 0) return false;
-
-      const isAvailable = await SMS.isAvailableAsync();
-      if (!isAvailable) return false;
-
-      const mapUrl = generateMapsLink(location);
-      const message = `[SafeWalk SOS] ${userName} has activated an emergency alert!\nLocation: ${mapUrl}\nSent at: ${new Date().toLocaleTimeString()}`;
-
-      const res = await SMS.sendSMSAsync(phoneNumbers, message);
-      return res.result === 'sent';
+      return await sendNativeEmergencySms(contacts, location.latitude, location.longitude, 'gps');
     } catch (err) {
       console.warn('[SOS] sendEmergencySMS error:', err);
       return false;
