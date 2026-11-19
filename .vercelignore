@@ -1,0 +1,7 @@
+functions
+server.js
+scripts
+__tests__
+firebase.json
+firestore.rules
+.env.example
